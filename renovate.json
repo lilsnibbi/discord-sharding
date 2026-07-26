@@ -1,0 +1,26 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": ["config:recommended"],
+	"automerge": false,
+	"dependencyDashboard": true,
+	"labels": ["dependencies"],
+	"lockFileMaintenance": {
+		"enabled": true,
+		"schedule": ["at any time"]
+	},
+	"packageRules": [
+		{
+			"description": "Keep major dependency upgrades isolated",
+			"matchUpdateTypes": ["major"],
+			"groupName": null
+		},
+		{
+			"description": "Use conventional dependency commit messages",
+			"matchManagers": ["bun", "github-actions"],
+			"semanticCommitScope": "deps",
+			"semanticCommitType": "chore"
+		}
+	],
+	"rangeStrategy": "bump",
+	"separateMajorMinor": true
+}

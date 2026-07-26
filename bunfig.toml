@@ -1,0 +1,10 @@
+[install]
+linker = "isolated"
+
+[test]
+coveragePathIgnorePatterns = ["tests/**"]
+coverageSkipTestFiles = true
+# Bun evaluates line and function thresholds per file. scripts/coverage.ts
+# enforces their package-wide 80% minimum from LCOV instead.
+coverageThreshold = { lines = 0, functions = 0, statements = 0.8 }
+root = "tests"

@@ -1,0 +1,60 @@
+export { BridgeClient } from "./bridge/BridgeClient";
+export { HubClient } from "./hub/HubClient";
+export { ShardClient } from "./shard/ShardClient";
+
+export type {
+	$BridgeAnalyticsQuery,
+	$BridgeClientOptions,
+	$BridgeShardSnapshot,
+	$BridgeShardState,
+	$BridgeSocketFactory,
+	$BridgeState,
+	$ShardProcess,
+	$ShardProcessCallbacks,
+	$ShardProcessContext,
+	$ShardProcessExit,
+	$ShardProcessFactory,
+} from "./types/bridge";
+export type {
+	$ErrorListener,
+	$JsonObject,
+	$JsonPrimitive,
+	$JsonValue,
+	$PayloadPolicy,
+	$ReconnectPolicy,
+	$RequestPolicy,
+	$RestartPolicy,
+	$Sleep,
+} from "./types/common";
+export type {
+	$DiscordCache,
+	$DiscordClient,
+	$DiscordManager,
+	$DiscordWebSocketManager,
+} from "./types/discord";
+export type {
+	$AnalyticsRecord,
+	$ClearAnalyticsOptions,
+	$GatewayFetch,
+	$HubAssignment,
+	$HubBridgeTopology,
+	$HubClientOptions,
+	$HubPersistence,
+	$HubState,
+	$HubTopology,
+	$PersistedAssignment,
+	$PersistedBridge,
+	$PersistedHubState,
+	$PersistedShard,
+	$PersistedShardState,
+} from "./types/hub";
+export type {
+	$BroadcastEvaluator,
+	$ShardBridge,
+	$ShardClientOptions,
+	$ShardClientState,
+	$ShardMessageContext,
+	$ShardMessageListener,
+	$ShardRequestHandler,
+	$ShardTransport,
+} from "./types/shard";

@@ -1,0 +1,50 @@
+live
+
+# dependencies (bun install)
+node_modules
+
+# generated package artifacts
+*.tgz
+release-assets
+.tmp
+
+# code coverage
+coverage
+*.lcov
+
+# local database state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# logs
+logs
+*.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# editors
+.vscode
+
+# task runners
+.turbo
+
+# Finder (MacOS) folder config
+.DS_Store
