@@ -1,4 +1,4 @@
-import { type $DiscordClient, ShardClient } from "@snibbilabs/sharding";
+import { type $DiscordClient, ShardClient } from "@lilsnibbi/discord-sharding";
 
 /**
  * Starts one Bridge-managed shard with an application-owned Discord client.

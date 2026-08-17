@@ -8,7 +8,7 @@ import {
   HubClient,
   ShardClient,
   type $BridgeClientOptions,
-} from "@snibbilabs/sharding";
+} from "@lilsnibbi/discord-sharding";
 
 const bridgeOptions = {
   id: "worker-a",

@@ -1,4 +1,4 @@
-import { HubClient } from "@snibbilabs/sharding";
+import { HubClient } from "@lilsnibbi/discord-sharding";
 
 function requireEnvironment(name: string): string {
 	const value = Bun.env[name];

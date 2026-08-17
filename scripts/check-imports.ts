@@ -191,8 +191,8 @@ function isAllowedPackageImport(file: string, specifier: string): boolean {
 	if (normalizedFile.startsWith(`${normalizedRoot}/examples/`)) {
 		return (
 			specifier === "discord.js" ||
-			specifier === "@snibbilabs/sharding" ||
-			specifier === "@snibbilabs/sharding/package.json"
+			specifier === "@lilsnibbi/discord-sharding" ||
+			specifier === "@lilsnibbi/discord-sharding/package.json"
 		);
 	}
 	if (normalizedFile.startsWith(`${normalizedRoot}/tests/`)) return specifier === "discord.js";

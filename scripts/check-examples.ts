@@ -320,8 +320,8 @@ function isAllowedPackageImport(specifier: string): boolean {
 		specifier === "bun" ||
 		specifier.startsWith("bun:") ||
 		specifier === "discord.js" ||
-		specifier === "@snibbilabs/sharding" ||
-		specifier === "@snibbilabs/sharding/package.json"
+		specifier === "@lilsnibbi/discord-sharding" ||
+		specifier === "@lilsnibbi/discord-sharding/package.json"
 	);
 }
 

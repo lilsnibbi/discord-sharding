@@ -1,4 +1,4 @@
-import { BridgeClient } from "@snibbilabs/sharding";
+import { BridgeClient } from "@lilsnibbi/discord-sharding";
 
 function requireEnvironment(name: string): string {
 	const value = Bun.env[name];

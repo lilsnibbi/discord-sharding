@@ -1,5 +1,5 @@
 /** Published package name. */
-export const EXPECTED_PACKAGE_NAME = "@snibbilabs/sharding";
+export const EXPECTED_PACKAGE_NAME = "@lilsnibbi/discord-sharding";
 
 /** Raw TypeScript package entry point. */
 export const EXPECTED_ENTRY_POINT = "./src/index.ts";
@@ -13,11 +13,11 @@ export const EXPECTED_DEPENDENCIES = {
 } as const;
 
 const EXPECTED_SCHEMA = "https://json.schemastore.org/package.json";
-const EXPECTED_HOMEPAGE = "https://github.com/snibbilabs/sharding#readme";
-const EXPECTED_BUGS_URL = "https://github.com/snibbilabs/sharding/issues";
-const EXPECTED_REPOSITORY_URL = "git+https://github.com/snibbilabs/sharding.git";
+const EXPECTED_HOMEPAGE = "https://github.com/lilsnibbi/discord-sharding#readme";
+const EXPECTED_BUGS_URL = "https://github.com/lilsnibbi/discord-sharding/issues";
+const EXPECTED_REPOSITORY_URL = "git+https://github.com/lilsnibbi/discord-sharding.git";
 const EXPECTED_DESCRIPTION = "Bun-native Discord shard orchestration across Hub, Bridge, and shard processes.";
-const EXPECTED_KEYWORDS = ["bun", "discord", "distributed-systems", "ipc", "sharding", "websocket"] as const;
+const EXPECTED_KEYWORDS = ["bun", "discord", "ipc", "sharding", "websocket"] as const;
 const EXPECTED_DEV_DEPENDENCIES = {
 	"@biomejs/biome": "2.5.5",
 	"@types/bun": "1.3.14",
@@ -116,7 +116,7 @@ export function validatePackageManifest(value: unknown, packed: boolean): $Valid
 	if (manifest.types !== EXPECTED_ENTRY_POINT) throw new Error(`${name} must expose raw TypeScript declarations`);
 	if (manifest.sideEffects !== false) throw new Error(`${name} must declare sideEffects=false`);
 	if (manifest.packageManager !== "bun@1.3.14") throw new Error(`${name} must pin Bun 1.3.14`);
-	if (manifest.author !== "SnibbiLabs") throw new Error(`${name} must attribute SnibbiLabs as author`);
+	if (manifest.author !== "lilsnibbi") throw new Error(`${name} must attribute lilsnibbi as author`);
 	if (manifest.license !== "Apache-2.0") throw new Error(`${name} must use Apache-2.0`);
 	if (manifest.homepage !== EXPECTED_HOMEPAGE) throw new Error(`${name} has unexpected homepage metadata`);
 

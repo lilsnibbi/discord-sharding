@@ -1,10 +1,10 @@
 {
-	"name": "@snibbilabs/sharding",
+	"name": "@lilsnibbi/discord-sharding",
 	"version": "0.1.4",
-	"author": "SnibbiLabs",
+	"author": "lilsnibbi",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/snibbilabs/sharding.git"
+		"url": "git+https://github.com/lilsnibbi/discord-sharding.git"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.5",
@@ -30,7 +30,7 @@
 	},
 	"$schema": "https://json.schemastore.org/package.json",
 	"bugs": {
-		"url": "https://github.com/snibbilabs/sharding/issues"
+		"url": "https://github.com/lilsnibbi/discord-sharding/issues"
 	},
 	"description": "Bun-native Discord shard orchestration across Hub, Bridge, and shard processes.",
 	"engines": {
@@ -45,11 +45,10 @@
 		"SECURITY.md",
 		"LICENSE"
 	],
-	"homepage": "https://github.com/snibbilabs/sharding#readme",
+	"homepage": "https://github.com/lilsnibbi/discord-sharding#readme",
 	"keywords": [
 		"bun",
 		"discord",
-		"distributed-systems",
 		"ipc",
 		"sharding",
 		"websocket"

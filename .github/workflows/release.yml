@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -24,16 +23,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Inspect commit message for release tag
+      - name: Inspect commit subject for a release tag
         id: check_release
         run: |
-          COMMIT_MSG=$(git log -1 --format=%B | tr -d '\r' | xargs)
-          echo "Commit message: '$COMMIT_MSG'"
-          if [[ "$COMMIT_MSG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
-            echo "tag_name=$COMMIT_MSG" >> "$GITHUB_OUTPUT"
-            echo "version=${COMMIT_MSG#v}" >> "$GITHUB_OUTPUT"
-            echo "Release commit detected: $COMMIT_MSG"
+          set -euo pipefail
+          COMMIT_SUBJECT="$(git log -1 --pretty=%s | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          echo "Commit subject: '$COMMIT_SUBJECT'"
+          if [[ "$COMMIT_SUBJECT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            {
+              echo "is_release=true"
+              echo "tag_name=$COMMIT_SUBJECT"
+              echo "version=${COMMIT_SUBJECT#v}"
+            } >> "$GITHUB_OUTPUT"
+            echo "Release commit detected: $COMMIT_SUBJECT"
           else
             echo "is_release=false" >> "$GITHUB_OUTPUT"
             echo "Not a release commit."
@@ -57,20 +59,35 @@ jobs:
         if: steps.check_release.outputs.is_release == 'true'
         run: bun run release:pack ${{ steps.check_release.outputs.tag_name }}
 
+      - name: Resolve the verified package archive
+        id: archive
+        if: steps.check_release.outputs.is_release == 'true'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          TARBALLS=(release-assets/*.tgz)
+          if [ "${#TARBALLS[@]}" -ne 1 ]; then
+            echo "Expected exactly one release archive, found ${#TARBALLS[@]}." >&2
+            exit 1
+          fi
+          echo "tarball=${TARBALLS[0]}" >> "$GITHUB_OUTPUT"
+          echo "Release archive: ${TARBALLS[0]}"
+
       - name: Create and push Git tag
         if: steps.check_release.outputs.is_release == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           TAG="${{ steps.check_release.outputs.tag_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
             echo "Creating tag $TAG..."
             git tag -a "$TAG" -m "Release $TAG"
             git push origin "$TAG"
-          else
-            echo "Tag $TAG already exists on remote."
           fi
 
       - name: Create GitHub Release
@@ -78,25 +95,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           TAG="${{ steps.check_release.outputs.tag_name }}"
-          echo "Creating GitHub Release for $TAG..."
-          gh release create "$TAG" \
-            release-assets/* \
-            --title "$TAG" \
-            --generate-notes || echo "GitHub release $TAG already exists."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists; uploading assets."
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            echo "Creating GitHub release for $TAG..."
+            gh release create "$TAG" release-assets/* --title "$TAG" --generate-notes
+          fi
 
-      - name: Publish to NPM Registry
+      - name: Publish to the npm registry
         if: steps.check_release.outputs.is_release == 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          VERSION="${{ steps.check_release.outputs.version }}"
-          TARBALL="release-assets/snibbilabs-sharding-${VERSION}.tgz"
-          if [ -n "$NODE_AUTH_TOKEN" ]; then
-            echo "Publishing $TARBALL to NPM..."
-            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-            npm publish "$TARBALL" --access public
-            echo "Successfully published $TARBALL to NPM!"
-          else
-            echo "Warning: NPM_TOKEN secret is not set in repository settings. Skipping NPM publish step."
+          set -euo pipefail
+          TARBALL="${{ steps.archive.outputs.tarball }}"
+          if [ -z "${NPM_CONFIG_TOKEN:-}" ]; then
+            echo "NPM_TOKEN repository secret is not set. Skipping the registry publish." >&2
+            exit 0
           fi
+          echo "Publishing $TARBALL..."
+          bun publish "$TARBALL" --access public --tolerate-republish
+          echo "Published $TARBALL to the npm registry."

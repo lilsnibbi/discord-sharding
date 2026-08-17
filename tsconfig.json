@@ -18,7 +18,7 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"paths": {
-			"@snibbilabs/sharding": ["./src/index.ts"]
+			"@lilsnibbi/discord-sharding": ["./src/index.ts"]
 		},
 		"resolveJsonModule": true,
 		"resolvePackageJsonExports": true,

@@ -5,7 +5,7 @@
 Use Bun 1.3.14 or newer:
 
 ```bash
-bun add @snibbilabs/sharding
+bun add @lilsnibbi/discord-sharding
 ```
 
 Add `discord.js` v14 in the bot application if it is not already present. Sharding uses a structural client contract

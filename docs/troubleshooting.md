@@ -85,10 +85,10 @@ the exact released migration history. Never edit an applied migration.
 ## Package imports fail
 
 - Run with the supported Bun version.
-- Import only from `@snibbilabs/sharding` or its documented `package.json` export.
+- Import only from `@lilsnibbi/discord-sharding` or its documented `package.json` export.
 - Do not add file extensions to imports.
 - Do not expect `dist`, compiled JavaScript, or generated declarations.
 - Run `bun run pack:check` to reproduce the clean-consumer validation.
 
-For a minimal sanitized reproduction, use [GitHub Issues](https://github.com/snibbilabs/sharding/issues) and state
+For a minimal sanitized reproduction, use [GitHub Issues](https://github.com/lilsnibbi/discord-sharding/issues) and state
 which boundaries were tested with fakes, locally, or against live services.
