@@ -6,6 +6,11 @@
 
 Orchestrate, assign, schedule, route, and monitor Discord shards through one focused Bun and TypeScript stack.
 
+[![CI](https://github.com/lilsnibbi/discord-sharding/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lilsnibbi/discord-sharding/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@lilsnibbi/discord-sharding?logo=npm)](https://www.npmjs.com/package/@lilsnibbi/discord-sharding)
+[![Bun](https://img.shields.io/badge/bun-%3E%3D1.3.14-000000?logo=bun)](https://bun.com)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 [`Documentation`](docs/README.md) · [`API reference`](docs/api-reference.md) · [`Getting started`](docs/getting-started.md) · [`Architecture`](docs/architecture.md)
 
 <br />
@@ -68,13 +73,13 @@ Application process client providing correlated IPC requests, broadcast evaluati
 ### 1. Install package
 
 ```bash
-bun add @snibbilabs/sharding
+bun add @lilsnibbi/discord-sharding
 ```
 
 ### 2. Start the Hub
 
 ```typescript
-import { HubClient } from "@snibbilabs/sharding";
+import { HubClient } from "@lilsnibbi/discord-sharding";
 
 const hub = new HubClient({
 	adminToken: process.env.HUB_ADMIN_TOKEN ?? "admin-secret-key-12345",
@@ -89,7 +94,7 @@ await hub.start();
 ### 3. Start a Bridge
 
 ```typescript
-import { BridgeClient } from "@snibbilabs/sharding";
+import { BridgeClient } from "@lilsnibbi/discord-sharding";
 
 const bridge = new BridgeClient({
 	hubUrl: "http://127.0.0.1:3000",
@@ -105,7 +110,7 @@ await bridge.start();
 ### 4. Integrate the Shard Client
 
 ```typescript
-import { ShardClient, type $DiscordClient } from "@snibbilabs/sharding";
+import { ShardClient, type $DiscordClient } from "@lilsnibbi/discord-sharding";
 
 declare const discordClient: $DiscordClient;
 
@@ -197,6 +202,6 @@ Sharding provides a production-ready Hub, Bridge, and Shard client stack for Bun
 
 ## Community, security, and license
 
-[Security policy](SECURITY.md) · [Issues](https://github.com/snibbilabs/sharding/issues)
+[Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Issues](https://github.com/lilsnibbi/discord-sharding/issues)
 
 Licensed under the [Apache License 2.0](LICENSE).

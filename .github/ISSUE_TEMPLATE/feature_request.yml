@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a change to Discord shard orchestration behaviour or its public API.
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This package is Discord shard orchestration only. Discord clients, REST wrappers, builders, voice, media,
+        and general utilities are out of scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: The operational problem, not a proposed implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: Public API shape, options, and events the change would add or alter.
+    validations:
+      required: true
+
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Impact on existing invariants
+      description: >-
+        How the proposal affects routing through the Hub, sticky assignment ownership, generation fencing, identify
+        scheduling, maintenance, or persistence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds available today with the current public API.

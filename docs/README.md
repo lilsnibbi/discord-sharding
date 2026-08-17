@@ -95,6 +95,6 @@ Control plane design, identify scheduling, sticky assignments, IPC routing, and 
 
 ## Community, security, and license
 
-[Project README](../README.md) · [Security policy](../SECURITY.md) · [GitHub Issues](https://github.com/snibbilabs/sharding/issues)
+[Project README](../README.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md) · [GitHub Issues](https://github.com/lilsnibbi/discord-sharding/issues)
 
 Licensed under the [Apache License 2.0](../LICENSE).
