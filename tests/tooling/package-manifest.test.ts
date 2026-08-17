@@ -10,12 +10,27 @@ import {
 
 const manifestValue: unknown = await Bun.file(`${import.meta.dir}/../../package.json`).json();
 const validManifest = requireRecord(manifestValue, "test package manifest");
+const validBugsUrl = "https://github.com/lilsnibbi/discord-sharding/issues";
+const validRepositoryUrl = "git+https://github.com/lilsnibbi/discord-sharding.git";
 
 describe("package manifest validation", () => {
 	test("accepts the reviewed raw TypeScript package", () => {
 		const result = validatePackageManifest(validManifest, false);
 		expect(result.name).toBe(EXPECTED_PACKAGE_NAME);
 		expect(result.exportTargets).toEqual([EXPECTED_ENTRY_POINT, "./package.json"]);
+	});
+
+	test("publishes the reviewed package identity", () => {
+		expect(validManifest.name).toBe(EXPECTED_PACKAGE_NAME);
+		expect(validManifest.author).toBe("lilsnibbi");
+		expect(validManifest.license).toBe("Apache-2.0");
+		expect(validManifest.homepage).toBe("https://github.com/lilsnibbi/discord-sharding#readme");
+		expect(requireRecord(validManifest.bugs, "test bugs").url).toBe(
+			"https://github.com/lilsnibbi/discord-sharding/issues",
+		);
+		expect(requireRecord(validManifest.repository, "test repository").url).toBe(
+			"git+https://github.com/lilsnibbi/discord-sharding.git",
+		);
 	});
 
 	test.each([
@@ -25,6 +40,85 @@ describe("package manifest validation", () => {
 		["module", "./src/index.ts"],
 	] as const)("rejects legacy %s metadata", (field, value) => {
 		expect(() => validatePackageManifest({ ...validManifest, [field]: value }, false)).toThrow();
+	});
+
+	test.each([
+		["name", "@example/sharding", 'unexpected name "@example/sharding"'],
+		["description", "Another package", "unexpected description"],
+		["version", "1.0", 'invalid version "1.0"'],
+		["author", "Someone Else", "attribute lilsnibbi as author"],
+		["license", "MIT", "must use Apache-2.0"],
+		["homepage", "https://example.invalid", "unexpected homepage metadata"],
+		["packageManager", "bun@1.0.0", "must pin Bun 1.3.14"],
+		["type", "commonjs", "must be ESM"],
+		["types", "./dist/index.d.ts", "raw TypeScript declarations"],
+		["sideEffects", true, "sideEffects=false"],
+		["$schema", "https://example.invalid/schema.json", "unexpected schema metadata"],
+	] as const)("rejects altered %s metadata", (field, value, message) => {
+		expect(() => validatePackageManifest({ ...validManifest, [field]: value }, false)).toThrow(message);
+	});
+
+	test.each([
+		["bugs", { url: "https://example.invalid/issues" }, "unexpected bugs metadata"],
+		["bugs", { email: "security@example.invalid", url: validBugsUrl }, "unexpected bugs metadata"],
+		["repository", { type: "git", url: "git+https://example.invalid/other.git" }, "unexpected repository metadata"],
+		["repository", { url: validRepositoryUrl }, "unexpected repository metadata"],
+		["engines", { bun: ">=1.0.0" }, "must require only Bun >=1.3.14"],
+		["engines", { bun: ">=1.3.14", node: ">=22" }, "must require only Bun >=1.3.14"],
+		["publishConfig", { access: "restricted" }, "must publish with public access"],
+		["publishConfig", { access: "public", registry: "https://example.invalid" }, "must publish with public access"],
+		["keywords", ["bun", "discord"], "unexpected keywords"],
+		["keywords", ["bun", "discord", "ipc", "sharding", "websocket", "extra"], "unexpected keywords"],
+	] as const)("rejects unreviewed %s metadata", (field, value, message) => {
+		expect(() => validatePackageManifest({ ...validManifest, [field]: value }, false)).toThrow(message);
+	});
+
+	test("rejects unreviewed development dependencies", () => {
+		const devDependencies = requireRecord(validManifest.devDependencies, "test development dependencies");
+		expect(() =>
+			validatePackageManifest({ ...validManifest, devDependencies: { ...devDependencies, example: "1.0.0" } }, false),
+		).toThrow("reviewed development dependencies");
+	});
+
+	test("rejects manifests that are not records or lack required strings", () => {
+		expect(() => validatePackageManifest([], false)).toThrow("must be an object");
+		expect(() => validatePackageManifest({ ...validManifest, name: "" }, false)).toThrow(
+			"name must be a non-empty string",
+		);
+		expect(() => validatePackageManifest({ ...validManifest, keywords: ["bun", 1] }, false)).toThrow(
+			"keywords must be an array of strings",
+		);
+		expect(() => validatePackageManifest({ ...validManifest, dependencies: { arktype: "" } }, false)).toThrow(
+			"dependencies.arktype must be a non-empty string",
+		);
+	});
+
+	test("rejects a packed peer dependency that retained a workspace protocol", () => {
+		const packed = {
+			...validManifest,
+			dependencies: { arktype: "2.2.3" },
+			peerDependencies: { "discord.js": "workspace:^14.27.0" },
+		};
+		expect(() => validatePackageManifest(packed, true)).toThrow("reviewed discord.js peer");
+	});
+
+	test("rejects a package.json export that does not target the manifest", () => {
+		const exportsMap = requireRecord(validManifest.exports, "test exports");
+		expect(() =>
+			validatePackageManifest(
+				{ ...validManifest, exports: { ...exportsMap, "./package.json": "./src/package.json" } },
+				false,
+			),
+		).toThrow("must export its package.json");
+	});
+
+	test("rejects bundled dependency metadata", () => {
+		expect(() => validatePackageManifest({ ...validManifest, bundleDependencies: ["arktype"] }, false)).toThrow(
+			"must not publish bundleDependencies",
+		);
+		expect(() => validatePackageManifest({ ...validManifest, bundledDependencies: {} }, false)).toThrow(
+			"must not publish bundledDependencies",
+		);
 	});
 
 	test("rejects compiled package files", () => {

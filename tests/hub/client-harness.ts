@@ -180,6 +180,8 @@ export const gatewayFetch: $GatewayFetch = () =>
 export function createHub(
 	persistence: $HubPersistence,
 	options: {
+		readonly evaluationCommitLeadMs?: number;
+		readonly maxEvaluations?: number;
 		readonly maxPending?: number;
 		readonly maxQueuedMessages?: number;
 		readonly fetch?: $GatewayFetch;
@@ -193,8 +195,10 @@ export function createHub(
 		adminToken: "admin-token-0001",
 		botToken: "discord-token-01",
 		bridgeToken: BRIDGE_TOKEN,
+		...(options.evaluationCommitLeadMs === undefined ? {} : { evaluationCommitLeadMs: options.evaluationCommitLeadMs }),
 		fetch: options.fetch ?? gatewayFetch,
 		hostname: "127.0.0.1",
+		...(options.maxEvaluations === undefined ? {} : { maxEvaluations: options.maxEvaluations }),
 		...(options.maxQueuedMessages === undefined ? {} : { maxQueuedMessages: options.maxQueuedMessages }),
 		persistence,
 		port: 0,
@@ -395,6 +399,22 @@ export function sentMessages(socket: FakeHubSocket, startIndex = 0): readonly Pa
 	return socket.sent
 		.slice(startIndex)
 		.map((encoded) => parseWireMessage(encoded, HUB_TO_BRIDGE_TYPES, DEFAULT_PAYLOAD_POLICY));
+}
+
+export function readTargetShardId(message: ParsedWireMessage): number {
+	const target = message.data.target;
+	if (typeof target !== "object" || target === null) throw new Error("Message target is missing.");
+	const shardId = Reflect.get(target, "shardId");
+	if (typeof shardId !== "number") throw new Error("Message target shard is missing.");
+	return shardId;
+}
+
+export function readErrorField(message: ParsedWireMessage, key: "code" | "message" | "name"): string {
+	const error = message.data.error;
+	if (typeof error !== "object" || error === null) throw new Error("Message did not include a serialized error.");
+	const field = Reflect.get(error, key);
+	if (typeof field !== "string") throw new Error(`Serialized error omitted its ${key}.`);
+	return field;
 }
 
 export function requireNumberProperty(value: Readonly<Record<string, unknown>>, key: string): number {
