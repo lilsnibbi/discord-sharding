@@ -2,6 +2,7 @@ import {
 	ShardingCapacityError,
 	ShardingProtocolError,
 	ShardingStateError,
+	ShardingTimeoutError,
 	ShardingTransportError,
 } from "../../errors/ShardingError";
 import { createRequestId } from "../../internal/validation";
@@ -222,6 +223,36 @@ export abstract class BridgeCore {
 				this.report(toError(cause), "maintenance listener");
 			}
 		}
+	}
+
+	/**
+	 * Resolves once the Bridge and its shards share one current Hub topology.
+	 *
+	 * Maintenance is a transient state that every topology change re-enters, so
+	 * Hub-dependent work that must not fail the caller waits here instead.
+	 *
+	 * @param timeoutMs - Maximum wait before the pending work is failed.
+	 */
+	protected awaitConnectionReady(timeoutMs: number): Promise<void> {
+		if (this.connectionReady) return Promise.resolve();
+		if (this.lifecycleState !== "running") {
+			return Promise.reject(new ShardingStateError(`BridgeClient is ${this.lifecycleState}.`));
+		}
+		if (this.connectionWaiters.size >= this.options.request.maxPending) {
+			return Promise.reject(new ShardingCapacityError("Bridge connection waiter capacity reached."));
+		}
+		return new Promise<void>((resolve, reject) => {
+			const waiter: $ConnectionWaiter = {
+				reject,
+				resolve,
+				timer: setTimeout(() => {
+					this.connectionWaiters.delete(waiter);
+					reject(new ShardingTimeoutError(`Bridge stayed in maintenance for longer than ${timeoutMs}ms.`));
+				}, timeoutMs),
+			};
+			this.connectionWaiters.add(waiter);
+			if (this.connectionReady) this.resolveConnectionWaiters();
+		});
 	}
 
 	protected resolveConnectionWaiters(): void {

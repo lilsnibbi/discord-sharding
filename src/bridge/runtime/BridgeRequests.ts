@@ -145,6 +145,16 @@ export abstract class BridgeRequests extends BridgeCore {
 	}
 
 	protected async forwardShardIdentify(managed: ManagedShardProcess, id: string): Promise<void> {
+		if (this.connectionReady) {
+			await this.sendIdentifyRequest(managed, id);
+			return;
+		}
+		void this.#holdIdentifyThroughMaintenance(managed, id).catch((cause: unknown) =>
+			this.report(toError(cause), `shard ${managed.shardId} identify hold`),
+		);
+	}
+
+	protected async sendIdentifyRequest(managed: ManagedShardProcess, id: string): Promise<void> {
 		let reserved = false;
 		try {
 			this.reserveOutbound(id, managed, "identify");
@@ -154,6 +164,17 @@ export abstract class BridgeRequests extends BridgeCore {
 			if (reserved) this.discardOutbound(id, managed, "identify");
 			await this.sendOutboundFailure(managed, "identify", id, cause);
 		}
+	}
+
+	async #holdIdentifyThroughMaintenance(managed: ManagedShardProcess, id: string): Promise<void> {
+		try {
+			await this.awaitConnectionReady(this.options.request.timeoutMs);
+		} catch (cause) {
+			await this.sendOutboundFailure(managed, "identify", id, cause);
+			return;
+		}
+		if (this.processes.get(managed.shardId) !== managed) return;
+		await this.sendIdentifyRequest(managed, id);
 	}
 
 	protected async forwardShardRoute(managed: ManagedShardProcess, message: ParsedWireMessage): Promise<void> {
