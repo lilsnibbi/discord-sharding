@@ -1,6 +1,6 @@
 import * as ts from "typescript/unstable/ast";
-import { API, SymbolFlags } from "typescript/unstable/sync";
-import { ROOT_DIRECTORY } from "./repository";
+import { SymbolFlags } from "typescript/unstable/sync";
+import { createSyncApi, ROOT_DIRECTORY } from "./repository";
 
 interface DocumentationFailure {
 	readonly file: string;
@@ -16,7 +16,7 @@ const normalizedRoot = normalizePath(ROOT_DIRECTORY);
 const sourceRoot = `${normalizedRoot}/src`;
 const publicTypesRoot = `${sourceRoot}/types/`;
 const entryPoint = `${sourceRoot}/index.ts`;
-const api = new API({ cwd: ROOT_DIRECTORY });
+const api = await createSyncApi({ cwd: ROOT_DIRECTORY });
 const snapshot = api.updateSnapshot({ openProjects: [`${ROOT_DIRECTORY}/tsconfig.json`] });
 const project = snapshot
 	.getProjects()

@@ -1,6 +1,5 @@
 import * as ts from "typescript/unstable/ast";
-import { API } from "typescript/unstable/sync";
-import { ROOT_DIRECTORY } from "./repository";
+import { createSyncApi, ROOT_DIRECTORY } from "./repository";
 
 interface PolicyFailure {
 	readonly file: string;
@@ -31,7 +30,7 @@ const prohibitedPackages = new Set([
 	"ts-mixer",
 ]);
 const transpiler = new Bun.Transpiler({ loader: "ts" });
-const api = new API({ cwd: ROOT_DIRECTORY });
+const api = await createSyncApi({ cwd: ROOT_DIRECTORY });
 const snapshot = api.updateSnapshot({ openProjects: [`${ROOT_DIRECTORY}/tsconfig.json`] });
 const project = snapshot
 	.getProjects()

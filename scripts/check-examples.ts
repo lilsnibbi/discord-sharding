@@ -1,6 +1,6 @@
 import * as ts from "typescript/unstable/ast";
-import { API, type Diagnostic, type Project } from "typescript/unstable/sync";
-import { ROOT_DIRECTORY } from "./repository";
+import type { Diagnostic, Project } from "typescript/unstable/sync";
+import { createSyncApi, ROOT_DIRECTORY } from "./repository";
 
 interface DocumentationExample {
 	readonly block: number;
@@ -81,7 +81,7 @@ virtualFiles.set(
 	}),
 );
 
-const api = new API({
+const api = await createSyncApi({
 	cwd: ROOT_DIRECTORY,
 	fs: {
 		fileExists(path) {
