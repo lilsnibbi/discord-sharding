@@ -66,6 +66,10 @@ export abstract class HubAssignmentController extends HubRestartController {
 
 	protected handleSessionReady(session: HubBridgeSession): void {
 		if (this.sessions.get(session.bridgeId) !== session || session.phase !== "ready") return;
+		this.hubEvents.emit("bridgeSynchronized", {
+			bridgeId: session.bridgeId,
+			topologyVersion: this.topologyVersion,
+		});
 		void this.ensureAssignedProcesses(session).catch((cause: unknown) =>
 			this.report(toError(cause), `Bridge ${session.bridgeId} assigned process startup`),
 		);
@@ -117,6 +121,11 @@ export abstract class HubAssignmentController extends HubRestartController {
 				this.clearRestartState(assignment.shardId);
 				this.assignments.set(step.shardId, assignment);
 				this.advanceTopology();
+				this.hubEvents.emit("shardAssigned", {
+					bridgeId: assignment.bridgeId,
+					epoch: assignment.epoch,
+					shardId: assignment.shardId,
+				});
 				await this.synchronizeSessions([target]);
 				await this.sendStart(target, assignment);
 				return;
@@ -150,6 +159,11 @@ export abstract class HubAssignmentController extends HubRestartController {
 				this.clearRestartState(assignment.shardId);
 				this.assignments.set(step.shardId, assignment);
 				this.advanceTopology();
+				this.hubEvents.emit("shardAssigned", {
+					bridgeId: assignment.bridgeId,
+					epoch: assignment.epoch,
+					shardId: assignment.shardId,
+				});
 				await this.synchronizeSessions([source, target]);
 				await this.sendStart(target, assignment);
 				return;
@@ -176,6 +190,11 @@ export abstract class HubAssignmentController extends HubRestartController {
 				this.clearRestartState(tombstone.shardId);
 				this.assignments.set(tombstone.shardId, tombstone);
 				this.advanceTopology();
+				this.hubEvents.emit("shardDeallocated", {
+					bridgeId: source.bridgeId,
+					reason: "capacity",
+					shardId: tombstone.shardId,
+				});
 				await this.synchronizeSessions([source]);
 				return;
 			}

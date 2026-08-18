@@ -148,6 +148,11 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 				this.clearRestartState(tombstone.shardId);
 				this.assignments.set(tombstone.shardId, tombstone);
 				released.push(tombstone.shardId);
+				this.hubEvents.emit("shardDeallocated", {
+					bridgeId,
+					reason: "released",
+					shardId: tombstone.shardId,
+				});
 			} catch (cause) {
 				failures.push(cause);
 				break;
@@ -337,6 +342,7 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 		this.shardCount = 0;
 		this.topologyVersion = 1;
 		this.startPromise = undefined;
+		this.hubEvents.removeAllListeners();
 		this.lifecycleState = failures.length === 0 ? "stopped" : "failed";
 		if (failures.length > 0) {
 			throw new AggregateError(failures, "Hub shutdown did not release every resource cleanly.");

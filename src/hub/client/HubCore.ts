@@ -5,6 +5,7 @@ import type {
 	$HubAssignment,
 	$HubBridgeTopology,
 	$HubClientOptions,
+	$HubEvents,
 	$HubState,
 	$HubTopology,
 	$PersistedAssignment,
@@ -14,6 +15,7 @@ import type {
 import type { IdentifyScheduler } from "../identify/IdentifyScheduler";
 import type { $HubBridgeSessionSocketData, HubBridgeSession } from "../session/HubBridgeSession";
 import { IDLE_ASSIGNMENT_MUTATION } from "./constants";
+import { HubEventEmitter } from "./HubEvents";
 import { normalizeOptions } from "./options";
 import type {
 	HubPersistenceAdapter,
@@ -84,6 +86,8 @@ export abstract class HubCore {
 	public abstract releaseBridge(bridgeId: string): Promise<readonly number[]>;
 	protected abstract closeSessionAfterFailure(session: HubBridgeSession, cause: unknown, context?: string): void;
 
+	protected readonly hubEvents: HubEventEmitter;
+
 	/**
 	 * Creates the shared Hub runtime without opening resources.
 	 *
@@ -91,6 +95,16 @@ export abstract class HubCore {
 	 */
 	protected constructor(options: $HubClientOptions) {
 		this.options = normalizeOptions(options);
+		this.hubEvents = new HubEventEmitter((error, context) => this.reportToCallback(error, context));
+	}
+
+	/**
+	 * Typed lifecycle events for Bridges, shards, and background errors.
+	 *
+	 * See `docs/hub-events.md` for every event name and payload shape.
+	 */
+	public get events(): $HubEvents {
+		return this.hubEvents;
 	}
 
 	/**
@@ -381,6 +395,11 @@ export abstract class HubCore {
 	}
 
 	protected report(error: Error, context: string): void {
+		this.reportToCallback(error, context);
+		this.hubEvents.emit("error", { context, error });
+	}
+
+	private reportToCallback(error: Error, context: string): void {
 		try {
 			this.options.onError?.(error, context);
 		} catch {

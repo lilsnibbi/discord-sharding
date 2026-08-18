@@ -99,6 +99,11 @@ export abstract class HubRestartController extends HubCore {
 				: [];
 		if (attempts.length >= policy.maxAttempts) {
 			this.restartHistory.set(identity.shardId, { attempts, bridgeId: session.bridgeId, policy });
+			this.hubEvents.emit("shardRestartsExhausted", {
+				bridgeId: session.bridgeId,
+				shardId: identity.shardId,
+				windowMs: policy.windowMs,
+			});
 			this.scheduleRestartWindowWake(session, identity, attempts[0] ?? now, policy, now);
 			return;
 		}
@@ -125,6 +130,12 @@ export abstract class HubRestartController extends HubCore {
 			);
 		}, delay);
 		this.restartTimers.set(identity.shardId, timer);
+		this.hubEvents.emit("shardRestartScheduled", {
+			attempt: attempts.length,
+			bridgeId: session.bridgeId,
+			delayMs: delay,
+			shardId: identity.shardId,
+		});
 	}
 
 	protected scheduleRestartWindowWake(

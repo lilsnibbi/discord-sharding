@@ -269,6 +269,10 @@ export abstract class HubRoutingController extends HubAssignmentController {
 	protected handleSessionClosed(session: HubBridgeSession): void {
 		if (this.sessions.get(session.bridgeId) !== session) return;
 		this.sessions.delete(session.bridgeId);
+		this.hubEvents.emit("bridgeDisconnected", {
+			bridgeId: session.bridgeId,
+			generation: session.bridgeGeneration,
+		});
 		for (const [key, pending] of this.pendingStarts) {
 			if (pending.session !== session) continue;
 			clearTimeout(pending.timer);

@@ -196,6 +196,7 @@ Hub-controlled.
 | Common | `$JsonPrimitive`, `$JsonObject`, `$JsonValue`, `$PayloadPolicy`, `$RequestPolicy`, `$ReconnectPolicy`, `$RestartPolicy`, `$Sleep`, `$ErrorListener` |
 | Discord | `$DiscordCache`, `$DiscordManager`, `$DiscordWebSocketManager`, `$DiscordClient` |
 | Hub | `$HubState`, `$GatewayFetch`, `$PersistedAssignment`, `$PersistedBridge`, `$PersistedShardState`, `$PersistedShard`, `$AnalyticsRecord`, `$PersistedHubState`, `$HubPersistence`, `$HubAssignment`, `$HubBridgeTopology`, `$HubTopology`, `$ClearAnalyticsOptions`, `$HubClientOptions` |
+| Hub events | `$HubEvents`, `$HubEventMap`, `$HubEventName`, `$HubEventListener`, `$HubBridgeConnectedEvent`, `$HubBridgeSynchronizedEvent`, `$HubBridgeDisconnectedEvent`, `$HubShardAssignedEvent`, `$HubShardDeallocatedEvent`, `$HubShardLifecycleEvent`, `$HubShardRestartScheduledEvent`, `$HubShardRestartsExhaustedEvent`, `$HubErrorEvent` |
 | Bridge | `$BridgeState`, `$BridgeShardState`, `$BridgeShardSnapshot`, `$ShardProcessExit`, `$ShardProcessCallbacks`, `$ShardProcessContext`, `$ShardProcess`, `$ShardProcessFactory`, `$BridgeSocketFactory`, `$BridgeAnalyticsQuery`, `$BridgeClientOptions` |
 | Shard | `$ShardClientState`, `$ShardClientOptions`, `$ShardBridge`, `$ShardBridgeSummary`, `$ShardIdentity`, `$ShardTransport`, `$ShardMessageContext`, `$ShardMessageListener`, `$ShardRequestHandler`, `$BroadcastEvaluator` |
 
