@@ -82,7 +82,20 @@ export abstract class BridgeTopology extends BridgeShards {
 			await this.sendHub("bridge.sync.ready", message.id, { topologyVersion });
 			return;
 		}
-		await this.enterTopologySynchronization();
+		const clusterChanged =
+			nextCluster.length !== this.clusterBridges.length ||
+			nextCluster.some((entry) => {
+				const current = this.clusterBridges.find((candidate) => candidate.bridgeId === entry.bridgeId);
+				return current === undefined || current.shardCount !== entry.shardCount;
+			});
+		const clusterOnly =
+			clusterChanged &&
+			this.connectionReady &&
+			this.connectionTopologyVersion > 0 &&
+			topologyVersion > this.connectionTopologyVersion &&
+			totalShards === this.totalShards &&
+			mapsEqual(nextAssignments, this.assignments);
+		if (!clusterOnly) await this.enterTopologySynchronization();
 		const totalShardsChanged = this.totalShards !== 0 && totalShards !== this.totalShards;
 		const stops: Promise<void>[] = [];
 		for (const managed of this.processes.values()) {
@@ -144,6 +157,7 @@ export abstract class BridgeTopology extends BridgeShards {
 			await this.finishSynchronization(syncId);
 			return;
 		}
+		const notifications: { readonly id: string; readonly managed: ManagedShardProcess }[] = [];
 		for (const managed of processes) {
 			const id = createRequestId(`sync-${managed.shardId}`);
 			const timer = setTimeout(() => {
@@ -151,6 +165,9 @@ export abstract class BridgeTopology extends BridgeShards {
 				this.socket?.close(1002, "Shard topology acknowledgement timed out");
 			}, this.options.request.timeoutMs);
 			this.syncAcknowledgements.set(id, { shardId: managed.shardId, timer });
+			notifications.push({ id, managed });
+		}
+		for (const { id, managed } of notifications) {
 			try {
 				await this.sendShardTopology(managed);
 				await this.sendShard(managed, "shard.control.maintenance", id, {
@@ -159,8 +176,11 @@ export abstract class BridgeTopology extends BridgeShards {
 					topologyVersion: this.topologyVersion,
 				});
 			} catch (cause) {
-				clearTimeout(timer);
-				this.syncAcknowledgements.delete(id);
+				const acknowledgement = this.syncAcknowledgements.get(id);
+				if (acknowledgement !== undefined) {
+					clearTimeout(acknowledgement.timer);
+					this.syncAcknowledgements.delete(id);
+				}
 				this.report(toError(cause), `shard ${managed.shardId} topology synchronization`);
 			}
 		}

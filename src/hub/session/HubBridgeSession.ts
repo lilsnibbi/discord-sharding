@@ -157,12 +157,12 @@ export class HubBridgeSession {
 		this.phase = "synchronizing";
 	}
 
-	public beginSynchronization(id: string, topologyVersion: number): Promise<void> {
+	public beginSynchronization(id: string, topologyVersion: number, keepReady = false): Promise<void> {
 		if (this.phase === "closed") return Promise.reject(new ShardingStateError("Bridge session is closed."));
 		if (this.#pendingSync !== undefined) {
 			return Promise.reject(new ShardingStateError("Bridge session already has a pending topology sync."));
 		}
-		this.phase = "synchronizing";
+		if (!(keepReady && this.phase === "ready")) this.phase = "synchronizing";
 		return new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				if (this.#pendingSync?.id !== id) return;

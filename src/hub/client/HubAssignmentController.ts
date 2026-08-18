@@ -31,7 +31,7 @@ export abstract class HubAssignmentController extends HubRestartController {
 		);
 	}
 
-	protected synchronizeSession(session: HubBridgeSession): Promise<void> {
+	protected synchronizeSession(session: HubBridgeSession, keepReady = false): Promise<void> {
 		if (session.phase === "closed") return Promise.reject(new ShardingStateError("Bridge session is closed."));
 		const id = createRequestId(`sync-${session.bridgeId}`);
 		const assignments = [...this.assignments.values()]
@@ -43,7 +43,7 @@ export abstract class HubAssignmentController extends HubRestartController {
 					shardId: assignment.shardId,
 				}),
 			);
-		const acknowledgement = session.beginSynchronization(id, this.topologyVersion);
+		const acknowledgement = session.beginSynchronization(id, this.topologyVersion, keepReady);
 		try {
 			session.send("hub.sync", id, {
 				assignments: Object.freeze(assignments),
@@ -103,6 +103,10 @@ export abstract class HubAssignmentController extends HubRestartController {
 			for (const session of this.sessions.values()) {
 				if (session.phase === "ready") await this.ensureAssignedProcesses(session);
 			}
+			const staleSessions = [...this.sessions.values()].filter(
+				(session) => session.phase === "ready" && session.synchronizedVersion !== this.topologyVersion,
+			);
+			await Promise.all(staleSessions.map((session) => this.synchronizeSession(session, true)));
 		}
 	}
 
