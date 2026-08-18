@@ -151,6 +151,7 @@ export abstract class HubProtocolController extends HubRoutingController {
 		) {
 			throw new ShardingProtocolError("Bridge heartbeat generation is stale.");
 		}
+		session.send("hub.heartbeat", message.id, { sentAt: heartbeat.sentAt });
 	}
 
 	protected handleIdentifyRequest(session: HubBridgeSession, message: ParsedWireMessage): void {

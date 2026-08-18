@@ -5,6 +5,7 @@ import type { $BridgeAnalyticsQuery } from "../../types/bridge";
 import type { $AnalyticsRecord } from "../../types/hub";
 import { BridgeAnalyticsStore } from "../database/BridgeAnalyticsStore";
 import { BridgeConnection } from "./BridgeConnection";
+import { SHARD_WATCHDOG_INTERVAL_MS } from "./BridgeShards";
 import { toError } from "./protocol";
 
 const DEFAULT_CONNECTION_TIMEOUT_MS = 30_000;
@@ -19,6 +20,9 @@ export class BridgeRuntime extends BridgeConnection {
 		try {
 			this.analytics = new BridgeAnalyticsStore(this.options.analyticsPath);
 			this.lifecycleState = "running";
+			this.shardWatchdogTimer = setInterval(() => {
+				this.sweepUnresponsiveShards(Date.now());
+			}, SHARD_WATCHDOG_INTERVAL_MS);
 			const reconnectTask = this.runConnectionLoop();
 			this.reconnectTask = reconnectTask;
 			void reconnectTask.catch((cause: unknown) => this.report(toError(cause), "Hub reconnect loop"));
@@ -126,6 +130,8 @@ export class BridgeRuntime extends BridgeConnection {
 	protected async performStop(): Promise<void> {
 		if (this.lifecycleState === "stopped") return;
 		this.lifecycleState = "stopping";
+		if (this.shardWatchdogTimer !== undefined) clearInterval(this.shardWatchdogTimer);
+		this.shardWatchdogTimer = undefined;
 		this.lifecycle.abort(new ShardingStateError("BridgeClient stopped."));
 		const socket = this.socket;
 		this.socket = undefined;

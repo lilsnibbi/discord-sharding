@@ -59,7 +59,9 @@ export abstract class BridgeCore {
 	protected reconnectTask: Promise<void> | undefined;
 	protected stopPromise: Promise<void> | undefined;
 	protected heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+	protected shardWatchdogTimer: ReturnType<typeof setInterval> | undefined;
 	protected inboundMessages = 0;
+	protected lastHubMessageAt = 0;
 	protected syncId: string | undefined;
 
 	public constructor(options: $BridgeClientOptions) {

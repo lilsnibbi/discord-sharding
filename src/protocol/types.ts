@@ -94,6 +94,9 @@ export interface WireDataMap {
 	readonly "bridge.sync.ready": {
 		readonly topologyVersion: number;
 	};
+	readonly "hub.heartbeat": {
+		readonly sentAt: number;
+	};
 	readonly "hub.eval.cancel": {
 		readonly reason: string;
 		readonly target: ShardIdentityData;
@@ -249,6 +252,7 @@ export const BRIDGE_TO_HUB_TYPES: ReadonlySet<WireMessageType> = new Set([
 
 export const HUB_TO_BRIDGE_TYPES: ReadonlySet<WireMessageType> = new Set([
 	"hub.eval.cancel",
+	"hub.heartbeat",
 	"hub.eval.commit",
 	"hub.eval.prepare",
 	"hub.eval.response",

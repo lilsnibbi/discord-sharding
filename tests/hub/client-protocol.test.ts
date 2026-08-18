@@ -50,6 +50,28 @@ describe("HubClient Bridge protocol", () => {
 		}
 	});
 
+	test("answers Bridge heartbeats so a wedged Hub becomes observable", async () => {
+		const installed = installFakeServe();
+		const hub = createHub(new MemoryHubPersistence());
+		try {
+			await hub.start();
+			const bridge = await openBridge(installed.server);
+			await synchronizeBridge(bridge);
+			bridge.send("bridge.heartbeat", "heartbeat:1", {
+				bridgeGeneration: BRIDGE_GENERATION,
+				connectionGeneration: 1,
+				sentAt: 4_321,
+			});
+			const acknowledgement = await bridge.waitForMessage("hub.heartbeat");
+			expect(acknowledgement.id).toBe("heartbeat:1");
+			expect(acknowledgement.data.sentAt).toBe(4_321);
+			expect(bridge.socket.closeCode).toBeUndefined();
+		} finally {
+			await hub.stop();
+			installed.restore();
+		}
+	});
+
 	test("does not retain a shard state whose reconnect persistence failed", async () => {
 		const installed = installFakeServe();
 		const persistence = new MemoryHubPersistence({

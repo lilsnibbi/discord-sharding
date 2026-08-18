@@ -229,7 +229,12 @@ export abstract class BridgeTopology extends BridgeShards {
 		};
 		const managed = new ManagedShardProcess(managedOptions);
 		this.processes.set(shardId, managed);
-		this.shardInboundQueues.set(managed, { failed: false, pending: 0, tail: Promise.resolve() });
+		this.shardInboundQueues.set(managed, {
+			failed: false,
+			lastMessageAt: Date.now(),
+			pending: 0,
+			tail: Promise.resolve(),
+		});
 		try {
 			managed.start();
 			if (this.processes.get(shardId) !== managed || (managed.state !== "starting" && managed.state !== "ready")) {
