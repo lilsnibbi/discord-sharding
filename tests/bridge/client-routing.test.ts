@@ -14,6 +14,64 @@ import {
 } from "./client-harness";
 
 describe("BridgeClient routing and analytics", () => {
+	test("answers the Hub instead of failing the connection when a shard process is gone", async () => {
+		const hub = createHubHarness();
+		const shards = createShardHarness();
+		const bridge = new BridgeClient(
+			createBridgeOptions(hub.url, {
+				processFactory: shards.factory,
+				socketFactory: hub.factory,
+			}),
+		);
+		try {
+			await bridge.start();
+			await waitForHubMessage(hub, "bridge.hello");
+			hub.send("hub.sync", "sync:1", {
+				assignments: [{ epoch: 3, shardId: 0 }],
+				bridgeGeneration: bridge.generation,
+				connectionGeneration: 1,
+				topologyVersion: 1,
+				totalShards: 2,
+			});
+			await bridge.waitUntilConnected(1_000);
+			hub.send("hub.shard.start", "start:1", {
+				assignmentEpoch: 3,
+				shardId: 0,
+				totalShards: 2,
+			});
+			await waitFor(() => shards.contexts.length === 1, "shard process");
+
+			const staleTarget = { assignmentEpoch: 3, processGeneration: 99, shardId: 0 };
+			const beforeRoute = hub.received.length;
+			hub.send("hub.route.request", "route:stale", {
+				kind: "request",
+				payload: null,
+				sourceShardId: 1,
+				target: staleTarget,
+			});
+			const failure = await waitForHubMessage(hub, "bridge.route.response", beforeRoute);
+			expect(failure.id).toBe("route:stale");
+			expect(failure.data.ok).toBe(false);
+			expect(failure.data.sourceShardId).toBe(1);
+
+			const beforePrepare = hub.received.length;
+			hub.send("hub.eval.prepare", "eval:stale", {
+				context: null,
+				evaluator: "() => 1",
+				sourceShardId: 1,
+				target: staleTarget,
+			});
+			const prepared = await waitForHubMessage(hub, "bridge.eval.prepared", beforePrepare);
+			expect(prepared.data.ok).toBe(false);
+
+			expect(hub.closeCode()).toBeNull();
+			expect(bridge.connected).toBe(true);
+		} finally {
+			await bridge.stop();
+			hub.close();
+		}
+	});
+
 	test("ignores late Hub route replies and returns local admission failures to the shard", async () => {
 		const hub = createHubHarness();
 		const shards = createShardHarness();

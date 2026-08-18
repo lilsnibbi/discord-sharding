@@ -55,18 +55,19 @@ export abstract class BridgeRequests extends BridgeCore {
 			throw new ShardingProtocolError("Granted identify response cannot include error.");
 		}
 		this.completeOutbound(message.id, pending);
-		await this.sendShard(
-			pending.managed,
-			"shard.control.identify.response",
-			message.id,
-			granted ? { granted: true } : { error: readError(message.data.error), granted: false },
+		await this.deliverToShard(pending.managed, "identify response", () =>
+			this.sendShard(
+				pending.managed,
+				"shard.control.identify.response",
+				message.id,
+				granted ? { granted: true } : { error: readError(message.data.error), granted: false },
+			),
 		);
 	}
 
 	protected async forwardRouteRequest(message: ParsedWireMessage): Promise<void> {
 		requireExactKeys(message.data, new Set(["kind", "payload", "sourceShardId", "target"]), "hub.route.request data");
 		const target = readIdentity(readRecord(message.data, "target"));
-		const managed = this.requireManagedIdentity(target);
 		const sourceShardId = readNullableShardId(message.data, "sourceShardId");
 		const kind = readRouteKind(message.data);
 		const payload = readPayload(message.data, "payload");
@@ -75,6 +76,13 @@ export abstract class BridgeRequests extends BridgeCore {
 		}
 		if (this.inboundRoutes.size >= this.options.request.maxPending) {
 			throw new ShardingCapacityError("Inbound route capacity reached.");
+		}
+		let managed: ManagedShardProcess;
+		try {
+			managed = this.requireManagedIdentity(target);
+		} catch (cause) {
+			await this.failRoutedRequest(message.id, target, sourceShardId, cause);
+			return;
 		}
 		const timer = setTimeout(() => this.inboundRoutes.delete(message.id), this.options.request.timeoutMs);
 		this.inboundRoutes.set(message.id, { managed, sourceShardId, timer });
@@ -87,7 +95,7 @@ export abstract class BridgeRequests extends BridgeCore {
 		} catch (cause) {
 			clearTimeout(timer);
 			this.inboundRoutes.delete(message.id);
-			throw cause;
+			await this.failRoutedRequest(message.id, target, sourceShardId, cause);
 		}
 	}
 
@@ -99,7 +107,9 @@ export abstract class BridgeRequests extends BridgeCore {
 			throw new ShardingProtocolError("Route response targets the wrong source shard.");
 		}
 		this.completeOutbound(message.id, pending);
-		await this.sendShard(pending.managed, "shard.control.route.response", message.id, response.result);
+		await this.deliverToShard(pending.managed, "route response", () =>
+			this.sendShard(pending.managed, "shard.control.route.response", message.id, response.result),
+		);
 	}
 
 	protected async forwardEvalPrepare(message: ParsedWireMessage): Promise<void> {
@@ -108,28 +118,48 @@ export abstract class BridgeRequests extends BridgeCore {
 			new Set(["context", "evaluator", "sourceShardId", "target"]),
 			"hub.eval.prepare data",
 		);
-		const managed = this.requireManagedIdentity(readIdentity(readRecord(message.data, "target")));
-		await this.sendShard(managed, "shard.control.eval.prepare", message.id, {
-			context: readPayload(message.data, "context"),
-			evaluator: readEvaluator(message.data),
-			sourceShardId: readShardId(message.data, "sourceShardId"),
-		});
+		const target = readIdentity(readRecord(message.data, "target"));
+		const context = readPayload(message.data, "context");
+		const evaluator = readEvaluator(message.data);
+		const sourceShardId = readShardId(message.data, "sourceShardId");
+		try {
+			const managed = this.requireManagedIdentity(target);
+			await this.sendShard(managed, "shard.control.eval.prepare", message.id, { context, evaluator, sourceShardId });
+		} catch (cause) {
+			await this.sendHub("bridge.eval.prepared", message.id, {
+				...target,
+				error: serializeError(cause),
+				ok: false,
+			});
+		}
 	}
 
 	protected async forwardEvalCommit(message: ParsedWireMessage): Promise<void> {
 		requireExactKeys(message.data, new Set(["executeAt", "target"]), "hub.eval.commit data");
-		const managed = this.requireManagedIdentity(readIdentity(readRecord(message.data, "target")));
-		await this.sendShard(managed, "shard.control.eval.commit", message.id, {
-			executeAt: readInteger(message.data, "executeAt", 0, Number.MAX_SAFE_INTEGER),
-		});
+		const target = readIdentity(readRecord(message.data, "target"));
+		const executeAt = readInteger(message.data, "executeAt", 0, Number.MAX_SAFE_INTEGER);
+		try {
+			const managed = this.requireManagedIdentity(target);
+			await this.sendShard(managed, "shard.control.eval.commit", message.id, { executeAt });
+		} catch (cause) {
+			await this.sendHub("bridge.eval.result", message.id, {
+				...target,
+				error: serializeError(cause),
+				ok: false,
+			});
+		}
 	}
 
 	protected async forwardEvalCancel(message: ParsedWireMessage): Promise<void> {
 		requireExactKeys(message.data, new Set(["reason", "target"]), "hub.eval.cancel data");
-		const managed = this.requireManagedIdentity(readIdentity(readRecord(message.data, "target")));
-		await this.sendShard(managed, "shard.control.eval.cancel", message.id, {
-			reason: readString(message.data, "reason", 512),
-		});
+		const target = readIdentity(readRecord(message.data, "target"));
+		const reason = readString(message.data, "reason", 512);
+		try {
+			const managed = this.requireManagedIdentity(target);
+			await this.sendShard(managed, "shard.control.eval.cancel", message.id, { reason });
+		} catch (cause) {
+			this.report(toError(cause), `shard ${target.shardId} evaluation cancellation`);
+		}
 	}
 
 	protected async forwardEvalResponse(message: ParsedWireMessage): Promise<void> {
@@ -141,7 +171,9 @@ export abstract class BridgeRequests extends BridgeCore {
 			throw new ShardingProtocolError("Evaluation response targets the wrong source shard.");
 		}
 		this.completeOutbound(message.id, pending);
-		await this.sendShard(pending.managed, "shard.control.eval.response", message.id, response);
+		await this.deliverToShard(pending.managed, "evaluation response", () =>
+			this.sendShard(pending.managed, "shard.control.eval.response", message.id, response),
+		);
 	}
 
 	protected async forwardShardIdentify(managed: ManagedShardProcess, id: string): Promise<void> {
@@ -263,6 +295,43 @@ export abstract class BridgeRequests extends BridgeCore {
 				payload,
 			});
 		}
+	}
+
+	/**
+	 * Runs one Hub-initiated delivery to a shard without failing the Hub socket.
+	 *
+	 * A shard process that exits between a Hub decision and its local delivery is
+	 * an expected local condition, not a Hub protocol violation, so it must not
+	 * take the whole Bridge connection and its remaining shards down with it.
+	 *
+	 * @param managed - Destination shard process.
+	 * @param context - Human-readable delivery description used when reporting.
+	 * @param delivery - Operation that sends the message over Bun IPC.
+	 */
+	protected async deliverToShard(
+		managed: ManagedShardProcess,
+		context: string,
+		delivery: () => Promise<void>,
+	): Promise<void> {
+		try {
+			await delivery();
+		} catch (cause) {
+			this.report(toError(cause), `shard ${managed.shardId} ${context}`);
+		}
+	}
+
+	protected async failRoutedRequest(
+		id: string,
+		target: ShardIdentityData,
+		sourceShardId: number | null,
+		cause: unknown,
+	): Promise<void> {
+		await this.sendHub("bridge.route.response", id, {
+			...target,
+			error: serializeError(cause),
+			ok: false,
+			sourceShardId,
+		});
 	}
 
 	protected requireManagedIdentity(identity: ShardIdentityData): ManagedShardProcess {

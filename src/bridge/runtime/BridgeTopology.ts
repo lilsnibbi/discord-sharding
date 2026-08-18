@@ -148,9 +148,10 @@ export abstract class BridgeTopology extends BridgeShards {
 			} catch (cause) {
 				clearTimeout(timer);
 				this.syncAcknowledgements.delete(id);
-				throw cause;
+				this.report(toError(cause), `shard ${managed.shardId} topology synchronization`);
 			}
 		}
+		if (this.syncAcknowledgements.size === 0) await this.finishSynchronization(syncId);
 	}
 
 	protected async finishSynchronization(syncId: string): Promise<void> {
