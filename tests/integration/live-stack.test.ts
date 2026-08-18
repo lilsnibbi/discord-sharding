@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
-import { BridgeClient, HubClient } from "../../src/index";
 import type { $HubEventName, $ShardIdentity } from "../../src/index";
+import { BridgeClient, HubClient } from "../../src/index";
 
 const token = process.env.TOKEN;
 const TOTAL_SHARDS = 2;
