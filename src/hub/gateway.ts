@@ -125,7 +125,9 @@ async function requestGatewayBotInfo(
 	}
 	if (!responseIsSuccessful) {
 		const suffix = statusText.length > 0 ? ` ${statusText}` : "";
-		const error = new ShardingTransportError(`Discord Gateway Bot request returned HTTP ${status}${suffix}.`);
+		const message = `Discord Gateway Bot request returned HTTP ${status}${suffix}.`;
+		const error =
+			status === 401 || status === 403 ? new ShardingConfigurationError(message) : new ShardingTransportError(message);
 		await cancelResponseBody(response, error);
 		throw error;
 	}

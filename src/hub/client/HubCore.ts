@@ -50,6 +50,7 @@ export abstract class HubCore {
 	protected readonly pendingStarts = new Map<string, PendingStart>();
 	protected readonly restartHistory = new Map<number, RestartHistory>();
 	protected readonly restartTimers = new Map<number, ReturnType<typeof setTimeout>>();
+	protected readonly startupLifecycle = new AbortController();
 	protected identifyScheduler: IdentifyScheduler | undefined;
 	protected persistence: HubPersistenceAdapter | undefined;
 	protected reconcilePromise: Promise<void> | undefined;

@@ -3,7 +3,7 @@ import { assertConfigurationKeys, snapshotConfigurationRecord } from "../../inte
 import { requireIdentifier, requireNonNegativeInteger, requirePositiveInteger } from "../../internal/validation";
 import type { $ClearAnalyticsOptions, $HubTopology, $PersistedAssignment, $PersistedBridge } from "../../types/hub";
 import { SQLiteHubPersistence } from "../database/SQLiteHubPersistence";
-import { fetchGatewayBotInfo } from "../gateway";
+import { loadGatewayBotInfo } from "../gatewayStartup";
 import { IdentifyScheduler } from "../identify/IdentifyScheduler";
 import { DEFAULT_ANALYTICS_BATCH_SIZE, IDLE_ASSIGNMENT_MUTATION } from "./constants";
 import { HubServerController } from "./HubServerController";
@@ -38,9 +38,11 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 			await persistence.migrate();
 			const [stateResult, gatewayResult] = await Promise.allSettled([
 				persistence.loadState(),
-				fetchGatewayBotInfo(this.options.botToken, {
+				loadGatewayBotInfo(this.options.botToken, {
 					endpoint: this.options.gatewayEndpoint,
-					fetch: this.options.fetch,
+					...(this.options.fetch === undefined ? {} : { fetch: this.options.fetch }),
+					signal: this.startupLifecycle.signal,
+					sleep: this.options.sleep,
 				}),
 			]);
 			const startupFailures: unknown[] = [];
@@ -212,6 +214,9 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 
 	protected async performStop(): Promise<void> {
 		if (this.lifecycleState === "stopped") return;
+		if (!this.startupLifecycle.signal.aborted) {
+			this.startupLifecycle.abort(new ShardingStateError("HubClient stopped."));
+		}
 		if (this.lifecycleState === "idle") {
 			this.lifecycleState = "stopped";
 			return;
