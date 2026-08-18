@@ -55,8 +55,12 @@ server started. Bridge process readiness may be defined at two levels:
 - `start()` confirms local SQLite and reconnect ownership.
 - `waitUntilConnected()` confirms Hub and retained-shard topology synchronization.
 
-On Hub loss, alert on maintenance but do not restart healthy Discord sessions. New starts, identifies, routing, and
-evaluations remain unavailable until synchronization returns.
+On Hub loss, alert on maintenance but do not restart healthy Discord sessions. New starts, routing, and evaluations
+remain unavailable until synchronization returns. Identify requests wait for synchronization instead of failing, so
+brief maintenance during a rollout does not restart shard processes.
+
+Maintenance that persists beyond a Bridge's reconnect backoff means the Hub is unreachable rather than busy. Both ends
+replace a connection whose peer stops answering, so a Bridge that reports itself connected is exchanging traffic.
 
 ## Capacity and reassignment
 
@@ -100,6 +104,7 @@ Record at least:
 
 - Hub lifecycle, migration, Gateway metadata, identify queue, session-start exhaustion, and request failures;
 - Bridge connection and maintenance changes, reconnect delay, buffered bytes, shard restarts, and shutdown deadlines;
+- Hub and shard liveness deadline failures, which indicate a wedged peer rather than a closed connection;
 - assigned, unassigned, starting, and Discord-ready shard counts;
 - targeted request and evaluation latency, expiry, rejection, and capacity;
 - Hub SQLite latency, disk growth, and migration status;
