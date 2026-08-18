@@ -17,7 +17,21 @@ import {
 } from "./utilities";
 
 export abstract class HubAssignmentController extends HubRestartController {
-	protected synchronizeSession(session: HubBridgeSession): Promise<void> {
+	protected clusterSummary(): readonly { readonly bridgeId: string; readonly shardCount: number }[] {
+		const counts = new Map<string, number>();
+		for (const bridgeId of this.bridges.keys()) counts.set(bridgeId, 0);
+		for (const assignment of this.assignments.values()) {
+			if (isReleasedAssignment(assignment)) continue;
+			counts.set(assignment.bridgeId, (counts.get(assignment.bridgeId) ?? 0) + 1);
+		}
+		return Object.freeze(
+			[...counts.entries()]
+				.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+				.map(([bridgeId, shardCount]) => Object.freeze({ bridgeId, shardCount })),
+		);
+	}
+
+	protected synchronizeSession(session: HubBridgeSession, keepReady = false): Promise<void> {
 		if (session.phase === "closed") return Promise.reject(new ShardingStateError("Bridge session is closed."));
 		const id = createRequestId(`sync-${session.bridgeId}`);
 		const assignments = [...this.assignments.values()]
@@ -29,11 +43,12 @@ export abstract class HubAssignmentController extends HubRestartController {
 					shardId: assignment.shardId,
 				}),
 			);
-		const acknowledgement = session.beginSynchronization(id, this.topologyVersion);
+		const acknowledgement = session.beginSynchronization(id, this.topologyVersion, keepReady);
 		try {
 			session.send("hub.sync", id, {
 				assignments: Object.freeze(assignments),
 				bridgeGeneration: session.bridgeGeneration,
+				cluster: this.clusterSummary(),
 				connectionGeneration: session.connectionGeneration,
 				topologyVersion: this.topologyVersion,
 				totalShards: this.shardCount,
@@ -51,6 +66,10 @@ export abstract class HubAssignmentController extends HubRestartController {
 
 	protected handleSessionReady(session: HubBridgeSession): void {
 		if (this.sessions.get(session.bridgeId) !== session || session.phase !== "ready") return;
+		this.hubEvents.emit("bridgeSynchronized", {
+			bridgeId: session.bridgeId,
+			topologyVersion: this.topologyVersion,
+		});
 		void this.ensureAssignedProcesses(session).catch((cause: unknown) =>
 			this.report(toError(cause), `Bridge ${session.bridgeId} assigned process startup`),
 		);
@@ -84,6 +103,10 @@ export abstract class HubAssignmentController extends HubRestartController {
 			for (const session of this.sessions.values()) {
 				if (session.phase === "ready") await this.ensureAssignedProcesses(session);
 			}
+			const staleSessions = [...this.sessions.values()].filter(
+				(session) => session.phase === "ready" && session.synchronizedVersion !== this.topologyVersion,
+			);
+			await Promise.all(staleSessions.map((session) => this.synchronizeSession(session, true)));
 		}
 	}
 
@@ -102,6 +125,11 @@ export abstract class HubAssignmentController extends HubRestartController {
 				this.clearRestartState(assignment.shardId);
 				this.assignments.set(step.shardId, assignment);
 				this.advanceTopology();
+				this.hubEvents.emit("shardAssigned", {
+					bridgeId: assignment.bridgeId,
+					epoch: assignment.epoch,
+					shardId: assignment.shardId,
+				});
 				await this.synchronizeSessions([target]);
 				await this.sendStart(target, assignment);
 				return;
@@ -135,6 +163,11 @@ export abstract class HubAssignmentController extends HubRestartController {
 				this.clearRestartState(assignment.shardId);
 				this.assignments.set(step.shardId, assignment);
 				this.advanceTopology();
+				this.hubEvents.emit("shardAssigned", {
+					bridgeId: assignment.bridgeId,
+					epoch: assignment.epoch,
+					shardId: assignment.shardId,
+				});
 				await this.synchronizeSessions([source, target]);
 				await this.sendStart(target, assignment);
 				return;
@@ -161,6 +194,11 @@ export abstract class HubAssignmentController extends HubRestartController {
 				this.clearRestartState(tombstone.shardId);
 				this.assignments.set(tombstone.shardId, tombstone);
 				this.advanceTopology();
+				this.hubEvents.emit("shardDeallocated", {
+					bridgeId: source.bridgeId,
+					reason: "capacity",
+					shardId: tombstone.shardId,
+				});
 				await this.synchronizeSessions([source]);
 				return;
 			}

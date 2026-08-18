@@ -1,17 +1,12 @@
-import {
-	ShardingCapacityError,
-	ShardingConfigurationError,
-	ShardingStateError,
-	ShardingTimeoutError,
-} from "../../errors/ShardingError";
+import { ShardingCapacityError, ShardingConfigurationError, ShardingStateError } from "../../errors/ShardingError";
 import { createRequestId, requirePositiveInteger } from "../../internal/validation";
 import { createWireMessage } from "../../protocol/codec";
 import type { $BridgeAnalyticsQuery } from "../../types/bridge";
 import type { $AnalyticsRecord } from "../../types/hub";
 import { BridgeAnalyticsStore } from "../database/BridgeAnalyticsStore";
 import { BridgeConnection } from "./BridgeConnection";
+import { SHARD_WATCHDOG_INTERVAL_MS } from "./BridgeShards";
 import { toError } from "./protocol";
-import type { $ConnectionWaiter } from "./types";
 
 const DEFAULT_CONNECTION_TIMEOUT_MS = 30_000;
 const MAX_MAINTENANCE_LISTENERS = 256;
@@ -25,6 +20,9 @@ export class BridgeRuntime extends BridgeConnection {
 		try {
 			this.analytics = new BridgeAnalyticsStore(this.options.analyticsPath);
 			this.lifecycleState = "running";
+			this.shardWatchdogTimer = setInterval(() => {
+				this.sweepUnresponsiveShards(Date.now());
+			}, SHARD_WATCHDOG_INTERVAL_MS);
 			const reconnectTask = this.runConnectionLoop();
 			this.reconnectTask = reconnectTask;
 			void reconnectTask.catch((cause: unknown) => this.report(toError(cause), "Hub reconnect loop"));
@@ -46,21 +44,7 @@ export class BridgeRuntime extends BridgeConnection {
 		if (this.connectionReady) return;
 		if (this.lifecycleState !== "running") throw new ShardingStateError(`BridgeClient is ${this.lifecycleState}.`);
 		requirePositiveInteger(timeoutMs, "timeoutMs");
-		if (this.connectionWaiters.size >= this.options.request.maxPending) {
-			throw new ShardingCapacityError("Bridge connection waiter capacity reached.");
-		}
-		await new Promise<void>((resolve, reject) => {
-			const waiter: $ConnectionWaiter = {
-				reject,
-				resolve,
-				timer: setTimeout(() => {
-					this.connectionWaiters.delete(waiter);
-					reject(new ShardingTimeoutError(`Bridge did not synchronize within ${timeoutMs}ms.`));
-				}, timeoutMs),
-			};
-			this.connectionWaiters.add(waiter);
-			if (this.connectionReady) this.resolveConnectionWaiters();
-		});
+		await this.awaitConnectionReady(timeoutMs);
 	}
 
 	/**
@@ -146,6 +130,8 @@ export class BridgeRuntime extends BridgeConnection {
 	protected async performStop(): Promise<void> {
 		if (this.lifecycleState === "stopped") return;
 		this.lifecycleState = "stopping";
+		if (this.shardWatchdogTimer !== undefined) clearInterval(this.shardWatchdogTimer);
+		this.shardWatchdogTimer = undefined;
 		this.lifecycle.abort(new ShardingStateError("BridgeClient stopped."));
 		const socket = this.socket;
 		this.socket = undefined;

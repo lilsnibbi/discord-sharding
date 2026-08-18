@@ -5,7 +5,7 @@ import {
 	ShardingTransportError,
 } from "../../errors/ShardingError";
 import { serializeError } from "../../internal/errors";
-import { MAX_SHARDS } from "../../internal/limits";
+import { MAX_BRIDGES, MAX_SHARDS } from "../../internal/limits";
 import { createRequestId } from "../../internal/validation";
 import { createWireMessage, requireExactKeys } from "../../protocol/codec";
 import { readArray, readInteger, readShardId, readString } from "../../protocol/readers";
@@ -31,7 +31,7 @@ export abstract class BridgeTopology extends BridgeShards {
 	): Promise<void> {
 		requireExactKeys(
 			message.data,
-			new Set(["assignments", "bridgeGeneration", "connectionGeneration", "topologyVersion", "totalShards"]),
+			new Set(["assignments", "bridgeGeneration", "cluster", "connectionGeneration", "topologyVersion", "totalShards"]),
 			"hub.sync data",
 		);
 		if (readString(message.data, "bridgeGeneration") !== this.generation) {
@@ -52,6 +52,17 @@ export abstract class BridgeTopology extends BridgeShards {
 			if (nextAssignments.has(shardId)) throw new ShardingProtocolError(`Duplicate assignment for shard ${shardId}.`);
 			nextAssignments.set(shardId, readInteger(record, "epoch", 1, Number.MAX_SAFE_INTEGER));
 		}
+		const cluster = readArray(message.data, "cluster", MAX_BRIDGES);
+		const nextCluster: { readonly bridgeId: string; readonly shardCount: number }[] = [];
+		const seenBridges = new Set<string>();
+		for (const value of cluster) {
+			const record = copyRecord(value, "Hub cluster entry");
+			requireExactKeys(record, new Set(["bridgeId", "shardCount"]), "Hub cluster entry");
+			const bridgeId = readString(record, "bridgeId");
+			if (seenBridges.has(bridgeId)) throw new ShardingProtocolError(`Duplicate cluster entry for Bridge ${bridgeId}.`);
+			seenBridges.add(bridgeId);
+			nextCluster.push(Object.freeze({ bridgeId, shardCount: readInteger(record, "shardCount", 0, MAX_SHARDS) }));
+		}
 		if (topologyVersion < this.connectionTopologyVersion) {
 			throw new ShardingProtocolError("Hub topology version cannot move backwards.");
 		}
@@ -71,7 +82,20 @@ export abstract class BridgeTopology extends BridgeShards {
 			await this.sendHub("bridge.sync.ready", message.id, { topologyVersion });
 			return;
 		}
-		await this.enterTopologySynchronization();
+		const clusterChanged =
+			nextCluster.length !== this.clusterBridges.length ||
+			nextCluster.some((entry) => {
+				const current = this.clusterBridges.find((candidate) => candidate.bridgeId === entry.bridgeId);
+				return current === undefined || current.shardCount !== entry.shardCount;
+			});
+		const clusterOnly =
+			clusterChanged &&
+			this.connectionReady &&
+			this.connectionTopologyVersion > 0 &&
+			topologyVersion > this.connectionTopologyVersion &&
+			totalShards === this.totalShards &&
+			mapsEqual(nextAssignments, this.assignments);
+		if (!clusterOnly) await this.enterTopologySynchronization();
 		const totalShardsChanged = this.totalShards !== 0 && totalShards !== this.totalShards;
 		const stops: Promise<void>[] = [];
 		for (const managed of this.processes.values()) {
@@ -93,6 +117,7 @@ export abstract class BridgeTopology extends BridgeShards {
 		this.topologyVersion = topologyVersion;
 		this.connectionTopologyVersion = topologyVersion;
 		this.totalShards = totalShards;
+		this.clusterBridges = Object.freeze(nextCluster);
 		await this.synchronizeMaintenance(message.id);
 	}
 
@@ -132,6 +157,7 @@ export abstract class BridgeTopology extends BridgeShards {
 			await this.finishSynchronization(syncId);
 			return;
 		}
+		const notifications: { readonly id: string; readonly managed: ManagedShardProcess }[] = [];
 		for (const managed of processes) {
 			const id = createRequestId(`sync-${managed.shardId}`);
 			const timer = setTimeout(() => {
@@ -139,18 +165,26 @@ export abstract class BridgeTopology extends BridgeShards {
 				this.socket?.close(1002, "Shard topology acknowledgement timed out");
 			}, this.options.request.timeoutMs);
 			this.syncAcknowledgements.set(id, { shardId: managed.shardId, timer });
+			notifications.push({ id, managed });
+		}
+		for (const { id, managed } of notifications) {
 			try {
+				await this.sendShardTopology(managed);
 				await this.sendShard(managed, "shard.control.maintenance", id, {
 					acknowledge: true,
 					maintenance: false,
 					topologyVersion: this.topologyVersion,
 				});
 			} catch (cause) {
-				clearTimeout(timer);
-				this.syncAcknowledgements.delete(id);
-				throw cause;
+				const acknowledgement = this.syncAcknowledgements.get(id);
+				if (acknowledgement !== undefined) {
+					clearTimeout(acknowledgement.timer);
+					this.syncAcknowledgements.delete(id);
+				}
+				this.report(toError(cause), `shard ${managed.shardId} topology synchronization`);
 			}
 		}
+		if (this.syncAcknowledgements.size === 0) await this.finishSynchronization(syncId);
 	}
 
 	protected async finishSynchronization(syncId: string): Promise<void> {
@@ -201,6 +235,7 @@ export abstract class BridgeTopology extends BridgeShards {
 			totalShards,
 			assignmentEpoch,
 			processGeneration,
+			this.id,
 		);
 		const managedOptions: ManagedShardOptions = {
 			args: this.options.args,
@@ -228,7 +263,12 @@ export abstract class BridgeTopology extends BridgeShards {
 		};
 		const managed = new ManagedShardProcess(managedOptions);
 		this.processes.set(shardId, managed);
-		this.shardInboundQueues.set(managed, { failed: false, pending: 0, tail: Promise.resolve() });
+		this.shardInboundQueues.set(managed, {
+			failed: false,
+			lastMessageAt: Date.now(),
+			pending: 0,
+			tail: Promise.resolve(),
+		});
 		try {
 			managed.start();
 			if (this.processes.get(shardId) !== managed || (managed.state !== "starting" && managed.state !== "ready")) {

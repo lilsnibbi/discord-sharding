@@ -36,6 +36,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -118,6 +119,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -134,6 +136,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:2", {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 2,
 				totalShards: 2,
@@ -163,6 +166,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -181,6 +185,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:2", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 2,
 				totalShards: 2,
@@ -192,6 +197,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:3", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 3,
 				totalShards: 2,
@@ -214,6 +220,68 @@ describe("BridgeClient synchronization and waiters", () => {
 		}
 	});
 
+	test("holds a shard identify through a maintenance window instead of failing it", async () => {
+		const hub = createHubHarness();
+		const shards = createShardHarness();
+		const bridge = new BridgeClient(
+			createBridgeOptions(hub.url, {
+				processFactory: shards.factory,
+				socketFactory: hub.factory,
+			}),
+		);
+		try {
+			await bridge.start();
+			await waitForHubMessage(hub, "bridge.hello");
+			hub.send("hub.sync", "sync:1", {
+				assignments: [{ epoch: 3, shardId: 0 }],
+				bridgeGeneration: bridge.generation,
+				cluster: [],
+				connectionGeneration: 1,
+				topologyVersion: 1,
+				totalShards: 2,
+			});
+			await bridge.waitUntilConnected(1_000);
+			hub.send("hub.shard.start", "start:1", {
+				assignmentEpoch: 3,
+				shardId: 0,
+				totalShards: 2,
+			});
+			await waitFor(() => shards.contexts.length === 1, "shard process");
+			const context = shards.contexts[0];
+			if (context === undefined) throw new Error("Shard context was not created.");
+
+			const beforeSync = shards.sent.length;
+			hub.send("hub.sync", "sync:2", {
+				assignments: [{ epoch: 3, shardId: 0 }],
+				bridgeGeneration: bridge.generation,
+				cluster: [],
+				connectionGeneration: 1,
+				topologyVersion: 2,
+				totalShards: 2,
+			});
+			const maintenance = await waitForShardMessage(shards, "shard.control.maintenance", beforeSync);
+			expect(bridge.isInMaintenance).toBe(true);
+
+			const beforeIdentify = hub.received.length;
+			const heldSendCount = shards.sent.length;
+			context.callbacks.onMessage(
+				createWireMessage("shard.identify.request", "identify:1", {}, DEFAULT_PAYLOAD_POLICY),
+			);
+			await Bun.sleep(20);
+			expect(shards.sent.length).toBe(heldSendCount);
+
+			context.callbacks.onMessage(
+				createWireMessage("shard.sync.ack", maintenance.id, { topologyVersion: 2 }, DEFAULT_PAYLOAD_POLICY),
+			);
+			await waitFor(() => bridge.connected, "topology acknowledgement");
+			const forwarded = await waitForHubMessage(hub, "bridge.identify.request", beforeIdentify);
+			expect(forwarded.id).toBe("identify:1");
+		} finally {
+			await bridge.stop();
+			hub.close();
+		}
+	});
+
 	test("stops a spawned process when its required startup notification fails", async () => {
 		const hub = createHubHarness();
 		const shards = createShardHarness();
@@ -229,6 +297,7 @@ describe("BridgeClient synchronization and waiters", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,

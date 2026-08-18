@@ -11,6 +11,7 @@ import { normalizePayloadPolicy } from "../internal/payload";
 import { normalizeRequestPolicy } from "../internal/policies";
 import {
 	parseEnvironmentInteger,
+	requireIdentifier,
 	requirePositiveInteger,
 	requireShardId,
 	requireTotalShards,
@@ -41,6 +42,7 @@ export interface CapturedDiscordClient {
 export interface ShardConfiguration {
 	readonly analyticsIntervalMs: number | false;
 	readonly assignmentEpoch: number;
+	readonly bridgeId: string | null;
 	readonly discordClient: CapturedDiscordClient;
 	readonly id: number;
 	readonly maxEvaluatorSourceLength: number;
@@ -66,6 +68,7 @@ const EVAL_RESPONSE_SUCCESS_KEYS = new Set(["results"]);
 const OPTION_KEYS = new Set([
 	"analyticsIntervalMs",
 	"assignmentEpoch",
+	"bridgeId",
 	"maxEvaluatorSourceLength",
 	"maxPreparedEvaluations",
 	"onError",
@@ -99,6 +102,8 @@ export function createShardConfiguration(botClient: $DiscordClient, options: $Sh
 		1,
 		(value) => requirePositiveInteger(value, "processGeneration"),
 	);
+	const bridgeIdValue = optionSnapshot.bridgeId ?? Bun.env.SHARDING_BRIDGE_ID;
+	const bridgeId = bridgeIdValue === undefined ? null : requireIdentifier(bridgeIdValue, "bridgeId");
 	const transport = captureTransport(optionSnapshot.transport ?? createProcessTransport());
 	const requestPolicy = normalizeRequestPolicy(readOptionalOptions<$RequestPolicy>(optionSnapshot.request, "request"));
 	const payloadPolicy = normalizePayloadPolicy(readOptionalOptions<$PayloadPolicy>(optionSnapshot.payload, "payload"));
@@ -118,6 +123,7 @@ export function createShardConfiguration(botClient: $DiscordClient, options: $Sh
 	return Object.freeze({
 		analyticsIntervalMs,
 		assignmentEpoch,
+		bridgeId,
 		discordClient,
 		id,
 		maxEvaluatorSourceLength: requirePositiveInteger(

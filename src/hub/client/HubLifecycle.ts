@@ -3,7 +3,7 @@ import { assertConfigurationKeys, snapshotConfigurationRecord } from "../../inte
 import { requireIdentifier, requireNonNegativeInteger, requirePositiveInteger } from "../../internal/validation";
 import type { $ClearAnalyticsOptions, $HubTopology, $PersistedAssignment, $PersistedBridge } from "../../types/hub";
 import { SQLiteHubPersistence } from "../database/SQLiteHubPersistence";
-import { fetchGatewayBotInfo } from "../gateway";
+import { loadGatewayBotInfo } from "../gatewayStartup";
 import { IdentifyScheduler } from "../identify/IdentifyScheduler";
 import { DEFAULT_ANALYTICS_BATCH_SIZE, IDLE_ASSIGNMENT_MUTATION } from "./constants";
 import { HubServerController } from "./HubServerController";
@@ -38,9 +38,11 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 			await persistence.migrate();
 			const [stateResult, gatewayResult] = await Promise.allSettled([
 				persistence.loadState(),
-				fetchGatewayBotInfo(this.options.botToken, {
+				loadGatewayBotInfo(this.options.botToken, {
 					endpoint: this.options.gatewayEndpoint,
-					fetch: this.options.fetch,
+					...(this.options.fetch === undefined ? {} : { fetch: this.options.fetch }),
+					signal: this.startupLifecycle.signal,
+					sleep: this.options.sleep,
 				}),
 			]);
 			const startupFailures: unknown[] = [];
@@ -146,6 +148,11 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 				this.clearRestartState(tombstone.shardId);
 				this.assignments.set(tombstone.shardId, tombstone);
 				released.push(tombstone.shardId);
+				this.hubEvents.emit("shardDeallocated", {
+					bridgeId,
+					reason: "released",
+					shardId: tombstone.shardId,
+				});
 			} catch (cause) {
 				failures.push(cause);
 				break;
@@ -212,6 +219,9 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 
 	protected async performStop(): Promise<void> {
 		if (this.lifecycleState === "stopped") return;
+		if (!this.startupLifecycle.signal.aborted) {
+			this.startupLifecycle.abort(new ShardingStateError("HubClient stopped."));
+		}
 		if (this.lifecycleState === "idle") {
 			this.lifecycleState = "stopped";
 			return;
@@ -332,6 +342,7 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 		this.shardCount = 0;
 		this.topologyVersion = 1;
 		this.startPromise = undefined;
+		this.hubEvents.removeAllListeners();
 		this.lifecycleState = failures.length === 0 ? "stopped" : "failed";
 		if (failures.length > 0) {
 			throw new AggregateError(failures, "Hub shutdown did not release every resource cleanly.");

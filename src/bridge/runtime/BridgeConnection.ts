@@ -6,12 +6,33 @@ import {
 } from "../../errors/ShardingError";
 import { reconnectDelay } from "../../internal/policies";
 import { createRequestId } from "../../internal/validation";
-import { parseWireMessage } from "../../protocol/codec";
+import { parseWireMessage, requireExactKeys } from "../../protocol/codec";
+import { readInteger } from "../../protocol/readers";
 import { HUB_TO_BRIDGE_TYPES } from "../../protocol/types";
 import { BridgeTopology } from "./BridgeTopology";
 import { closeSocketForHubError, toError } from "./protocol";
 
-const HEARTBEAT_INTERVAL_MS = 10_000;
+export const HEARTBEAT_INTERVAL_MS = 10_000;
+/**
+ * Longest silence tolerated from a Hub before its connection is replaced.
+ *
+ * The Hub answers every heartbeat, so a connection that stays open without
+ * inbound traffic is wedged rather than idle. Without this deadline a Bridge
+ * keeps reporting itself healthy, never enters maintenance, and never
+ * reconnects. The value allows several missed heartbeats so ordinary jitter
+ * never replaces a working connection.
+ */
+export const HUB_SILENCE_TIMEOUT_MS = 45_000;
+
+/**
+ * Reports whether a Hub connection has stayed silent past its deadline.
+ *
+ * @param lastHubMessageAt - Unix millisecond of the newest inbound Hub message.
+ * @param now - Current Unix millisecond.
+ */
+export function hubSilenceExceeded(lastHubMessageAt: number, now: number): boolean {
+	return now - lastHubMessageAt > HUB_SILENCE_TIMEOUT_MS;
+}
 
 export abstract class BridgeConnection extends BridgeTopology {
 	protected async runConnectionLoop(): Promise<void> {
@@ -95,7 +116,15 @@ export abstract class BridgeConnection extends BridgeTopology {
 				openTimer = undefined;
 				this.socket = socket;
 				this.connectionTopologyVersion = 0;
+				this.lastHubMessageAt = Date.now();
 				this.heartbeatTimer = setInterval(() => {
+					const now = Date.now();
+					if (hubSilenceExceeded(this.lastHubMessageAt, now)) {
+						const silence = now - this.lastHubMessageAt;
+						this.report(new ShardingTimeoutError(`Hub sent nothing for ${silence}ms.`), "Hub liveness");
+						socket.close(1011, "Hub liveness deadline exceeded");
+						return;
+					}
 					void this.sendHeartbeat(connectionGeneration).catch((cause: unknown) => {
 						this.report(toError(cause), "Hub heartbeat");
 						socket.close(1011, "Heartbeat failed");
@@ -108,6 +137,7 @@ export abstract class BridgeConnection extends BridgeTopology {
 			};
 			const onMessage = (event: MessageEvent): void => {
 				if (this.socket !== socket || connectionGeneration !== this.connectionGeneration) return;
+				this.lastHubMessageAt = Date.now();
 				if (this.inboundMessages >= this.options.request.maxPending) {
 					socket.close(1013, "Inbound capacity reached");
 					return;
@@ -204,6 +234,10 @@ export abstract class BridgeConnection extends BridgeTopology {
 		if (this.socket !== socket || this.connectionGeneration !== connectionGeneration) return;
 		const message = parseWireMessage(value, HUB_TO_BRIDGE_TYPES, this.payloadPolicy);
 		switch (message.type) {
+			case "hub.heartbeat":
+				requireExactKeys(message.data, new Set(["sentAt"]), "hub.heartbeat data");
+				readInteger(message.data, "sentAt", 0, Number.MAX_SAFE_INTEGER);
+				return;
 			case "hub.sync":
 				await this.handleSync(message, socket, connectionGeneration);
 				return;

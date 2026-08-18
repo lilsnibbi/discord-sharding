@@ -56,6 +56,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -107,6 +108,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -154,6 +156,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:first", {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 5,
 				totalShards: 2,
@@ -166,6 +169,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:replacement", {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 2,
 				topologyVersion: 1,
 				totalShards: 3,
@@ -193,6 +197,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:first", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -213,6 +218,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:replacement", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 2,
 				topologyVersion: 1,
 				totalShards: 3,
@@ -249,6 +255,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -288,6 +295,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:2", {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 2,
 				totalShards: 2,
@@ -296,6 +304,7 @@ describe("BridgeClient topology and process control", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,

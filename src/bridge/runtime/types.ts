@@ -53,6 +53,7 @@ export interface $ConnectionWaiter {
 
 export interface $ShardInboundQueue {
 	failed: boolean;
+	lastMessageAt: number;
 	pending: number;
 	tail: Promise<void>;
 }

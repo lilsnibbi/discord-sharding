@@ -1,4 +1,4 @@
-import { ShardingCapacityError, ShardingProtocolError } from "../../errors/ShardingError";
+import { ShardingCapacityError, ShardingProtocolError, ShardingTimeoutError } from "../../errors/ShardingError";
 import { MAX_SHARDS } from "../../internal/limits";
 import { createRequestId, requireTotalShards } from "../../internal/validation";
 import { createWireMessage, parseWireMessage, requireExactKeys } from "../../protocol/codec";
@@ -7,6 +7,17 @@ import { type ParsedWireMessage, SHARD_TO_BRIDGE_TYPES } from "../../protocol/ty
 import type { ManagedShardProcess } from "../shards/ManagedShardProcess";
 import { BridgeRequests } from "./BridgeRequests";
 import { matchesIdentity, readIdentity, toError } from "./protocol";
+
+/** How often running shard processes are checked for silence. */
+export const SHARD_WATCHDOG_INTERVAL_MS = 10_000;
+/**
+ * Longest silence tolerated from a Discord-ready shard process.
+ *
+ * Shards heartbeat every ten seconds. A process whose event loop is blocked
+ * stays alive and keeps its `ready` state, so the Hub would go on routing
+ * traffic and broadcast evaluations to a shard that can never answer.
+ */
+export const SHARD_SILENCE_TIMEOUT_MS = 45_000;
 
 export abstract class BridgeShards extends BridgeRequests {
 	protected abstract handleSyncAcknowledgement(managed: ManagedShardProcess, message: ParsedWireMessage): void;
@@ -74,6 +85,7 @@ export abstract class BridgeShards extends BridgeRequests {
 			void this.terminateMisbehavingShard(managed, error);
 			return;
 		}
+		queue.lastMessageAt = Date.now();
 		queue.pending += 1;
 		queue.tail = queue.tail
 			.then(async () => {
@@ -91,6 +103,24 @@ export abstract class BridgeShards extends BridgeRequests {
 			.finally(() => {
 				queue.pending -= 1;
 			});
+	}
+
+	protected sweepUnresponsiveShards(now: number): void {
+		for (const managed of [...this.processes.values()]) {
+			if (managed.state !== "ready") continue;
+			const queue = this.shardInboundQueues.get(managed);
+			if (queue === undefined || queue.failed) continue;
+			const silence = now - queue.lastMessageAt;
+			if (silence <= SHARD_SILENCE_TIMEOUT_MS) continue;
+			queue.failed = true;
+			this.report(
+				new ShardingTimeoutError(`Shard ${managed.shardId} sent nothing for ${silence}ms.`),
+				`shard ${managed.shardId} liveness`,
+			);
+			void managed
+				.terminate()
+				.catch((cause: unknown) => this.report(toError(cause), `shard ${managed.shardId} liveness`));
+		}
 	}
 
 	protected async terminateMisbehavingShard(managed: ManagedShardProcess, cause: Error): Promise<void> {
@@ -124,6 +154,7 @@ export abstract class BridgeShards extends BridgeRequests {
 		if (totalShards !== this.totalShards) {
 			throw new ShardingProtocolError("Shard boot totalShards does not match the synchronized topology.");
 		}
+		await this.sendShardTopology(managed);
 		const id = createRequestId(`maintenance-${managed.shardId}`);
 		await this.sendShard(managed, "shard.control.maintenance", id, {
 			acknowledge: false,

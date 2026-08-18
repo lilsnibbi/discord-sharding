@@ -2,6 +2,7 @@ import {
 	ShardingCapacityError,
 	ShardingProtocolError,
 	ShardingStateError,
+	ShardingTimeoutError,
 	ShardingTransportError,
 } from "../../errors/ShardingError";
 import { createRequestId } from "../../internal/validation";
@@ -52,13 +53,16 @@ export abstract class BridgeCore {
 	protected connectionTopologyVersion = 0;
 	protected topologyVersion = 0;
 	protected totalShards = 0;
+	protected clusterBridges: readonly { readonly bridgeId: string; readonly shardCount: number }[] = Object.freeze([]);
 	protected connectionReady = false;
 	protected maintenance = true;
 	protected lifecycleState: $BridgeState = "idle";
 	protected reconnectTask: Promise<void> | undefined;
 	protected stopPromise: Promise<void> | undefined;
 	protected heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+	protected shardWatchdogTimer: ReturnType<typeof setInterval> | undefined;
 	protected inboundMessages = 0;
+	protected lastHubMessageAt = 0;
 	protected syncId: string | undefined;
 
 	public constructor(options: $BridgeClientOptions) {
@@ -184,6 +188,16 @@ export abstract class BridgeCore {
 		await managed.send(message);
 	}
 
+	protected async sendShardTopology(managed: ManagedShardProcess): Promise<void> {
+		if (this.topologyVersion === 0) return;
+		await this.sendShard(managed, "shard.control.topology", createRequestId(`topology-${managed.shardId}`), {
+			bridgeId: this.id,
+			bridges: this.clusterBridges,
+			topologyVersion: this.topologyVersion,
+			totalShards: this.totalShards,
+		});
+	}
+
 	protected async setDisconnected(cause: Error): Promise<void> {
 		this.connectionReady = false;
 		this.syncId = undefined;
@@ -222,6 +236,36 @@ export abstract class BridgeCore {
 				this.report(toError(cause), "maintenance listener");
 			}
 		}
+	}
+
+	/**
+	 * Resolves once the Bridge and its shards share one current Hub topology.
+	 *
+	 * Maintenance is a transient state that every topology change re-enters, so
+	 * Hub-dependent work that must not fail the caller waits here instead.
+	 *
+	 * @param timeoutMs - Maximum wait before the pending work is failed.
+	 */
+	protected awaitConnectionReady(timeoutMs: number): Promise<void> {
+		if (this.connectionReady) return Promise.resolve();
+		if (this.lifecycleState !== "running") {
+			return Promise.reject(new ShardingStateError(`BridgeClient is ${this.lifecycleState}.`));
+		}
+		if (this.connectionWaiters.size >= this.options.request.maxPending) {
+			return Promise.reject(new ShardingCapacityError("Bridge connection waiter capacity reached."));
+		}
+		return new Promise<void>((resolve, reject) => {
+			const waiter: $ConnectionWaiter = {
+				reject,
+				resolve,
+				timer: setTimeout(() => {
+					this.connectionWaiters.delete(waiter);
+					reject(new ShardingTimeoutError(`Bridge stayed in maintenance for longer than ${timeoutMs}ms.`));
+				}, timeoutMs),
+			};
+			this.connectionWaiters.add(waiter);
+			if (this.connectionReady) this.resolveConnectionWaiters();
+		});
 	}
 
 	protected resolveConnectionWaiters(): void {

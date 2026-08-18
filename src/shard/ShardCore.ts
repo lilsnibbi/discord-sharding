@@ -14,7 +14,7 @@ import {
 } from "../protocol/types";
 import type { $PayloadPolicy, $RequestPolicy } from "../types/common";
 import type { $DiscordClient } from "../types/discord";
-import type { $ShardBridge, $ShardClientOptions, $ShardClientState } from "../types/shard";
+import type { $ShardBridge, $ShardClientOptions, $ShardClientState, $ShardIdentity } from "../types/shard";
 import {
 	cacheSize,
 	createShardConfiguration,
@@ -25,6 +25,7 @@ import {
 	withDeadline,
 } from "./runtime";
 import { ShardBridgeState } from "./ShardBridgeState";
+import { ShardIdentityState } from "./ShardIdentityState";
 
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
@@ -67,6 +68,7 @@ export abstract class ShardCore<Client extends $DiscordClient> implements AsyncD
 	protected stateValue: $ShardClientState = "idle";
 
 	readonly #maintenance: ShardBridgeState;
+	readonly #identity: ShardIdentityState;
 	#removeTransportListener: (() => void) | undefined;
 	#removeTransportDisconnectListener: (() => void) | undefined;
 	#analyticsTimer: ReturnType<typeof setInterval> | undefined;
@@ -95,6 +97,25 @@ export abstract class ShardCore<Client extends $DiscordClient> implements AsyncD
 		this.requests = new RequestRegistry(this.requestPolicy.timeoutMs, this.requestPolicy.maxPending);
 		this.#maintenance = new ShardBridgeState((error, context) => this.report(error, context));
 		this.bridge = this.#maintenance;
+		this.#identity = new ShardIdentityState(
+			{
+				assignmentEpoch: configuration.assignmentEpoch,
+				processGeneration: configuration.processGeneration,
+				shardId: configuration.id,
+				totalShards: configuration.totalShards,
+			},
+			configuration.bridgeId,
+		);
+	}
+
+	/**
+	 * Frozen self-description of this shard process.
+	 *
+	 * Bridge and cluster fields update after each Hub topology
+	 * synchronization; read this getter again to observe changes.
+	 */
+	public get identity(): $ShardIdentity {
+		return this.#identity.snapshot;
 	}
 
 	/**
@@ -198,6 +219,10 @@ export abstract class ShardCore<Client extends $DiscordClient> implements AsyncD
 
 	protected settleRequest(message: ParsedWireMessage): void {
 		this.requests.settle(message.id, message);
+	}
+
+	protected handleTopologyMessage(message: ParsedWireMessage): void {
+		this.#identity.applyTopologyMessage(message);
 	}
 
 	protected async handleMaintenanceMessage(message: ParsedWireMessage): Promise<void> {

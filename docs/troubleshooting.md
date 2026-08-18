@@ -13,6 +13,8 @@ or guild data.
 2. Confirm `databasePath` or a custom persistence implementation is supplied, but not an invalid combination.
 3. Check SQLite file path, permissions, directory existence, disk space, and migration logs.
 4. Confirm Discord's Gateway Bot endpoint is reachable and returned a valid shard recommendation and session limit.
+   Transport failures are retried with backoff, so a reported failure means Discord stayed unavailable. HTTP 401 and
+   403 are raised immediately and mean the bot token was rejected.
 5. Confirm the configured host and port are available.
 
 Startup rolls back partial resources. Preserve the first error and its `cause`.
@@ -48,10 +50,17 @@ Release a Bridge only after independently confirming its processes and Discord s
 4. Confirm the Discord client satisfies the structural client contract.
 5. Inspect startup deadline, restart backoff, exit code, signal, and the earliest reported error.
 
+A shard terminated for silence is reported through the Bridge error listener before it exits. That means the process
+stayed alive without heartbeating, so look for a blocked event loop, synchronous work, or memory pressure rather than
+a crash.
+
 ## Discord login waits or fails
 
-`ShardClient.login()` waits for a Hub identify grant. Check maintenance, Discord's remaining session starts and reset
-time, identify bucket occupancy, and other processes using the same bot token.
+`ShardClient.login()` waits for a Hub identify grant, including through a Bridge maintenance window. Check Discord's
+remaining session starts and reset time, identify bucket occupancy, and other processes using the same bot token.
+
+A login that fails rather than waits means maintenance outlasted `request.timeoutMs`, so investigate the Hub
+connection rather than the shard.
 
 Do not bypass the scheduler by calling the Discord client login method directly. An invalid Discord token or Gateway
 rejection remains an application or Discord failure after admission.

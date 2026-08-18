@@ -1,5 +1,8 @@
 # Architecture
 
+For implementation-level detail with file references, see the
+[architecture deep dive](architecture/overview.md).
+
 Sharding has one mandatory control path:
 
 ```text
@@ -43,6 +46,13 @@ waits for this admission before it calls the application Discord client.
 This controls starts made through Sharding. Other processes using the same bot token must not bypass the same admission
 boundary.
 
+Hub startup retries the Gateway Bot request with bounded exponential backoff, because Discord is the Hub's only
+external dependency and a single unavailable response would otherwise stop the whole deployment from starting. HTTP
+401 and 403 are configuration failures and are not retried.
+
+Every topology change briefly returns a Bridge to maintenance, so identify requests wait for synchronization to
+finish rather than failing. Failing them would kill the shard process, which advances topology again and repeats.
+
 ## Routing
 
 Targeted messages, correlated requests, and broadcast evaluation always use:
@@ -63,6 +73,15 @@ cannot forcibly stop application code already running inside another process.
 A Bridge enters maintenance as soon as its Hub socket is unavailable. It keeps existing shard processes and Discord
 sessions alive, reconnects with bounded backoff until shutdown, and blocks Hub-dependent work. Maintenance clears only
 after the Bridge and its retained shards acknowledge one current topology.
+
+Both ends of every link enforce a liveness deadline, because a wedged peer holds a socket open without answering. The
+Hub closes idle Bridge sockets and answers each Bridge heartbeat, and a Bridge replaces a Hub connection that sends
+nothing within its deadline. A Bridge also terminates a Discord-ready shard process that stops heartbeating; that exit
+is reported as a failure so the Hub restarts it under the Bridge's restart policy.
+
+A shard process that exits between a Hub decision and the local delivery is an expected local condition. The Bridge
+answers the waiting Hub with a failure for that shard and keeps its connection, so one dead process never drops the
+remaining shards on that host into maintenance.
 
 Bridge startup prepares local SQLite and begins reconnecting without waiting for Hub availability. Hub startup applies
 SQLite migrations and restores durable state before accepting traffic.

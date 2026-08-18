@@ -79,6 +79,11 @@ export abstract class HubProtocolController extends HubRoutingController {
 		});
 		this.bridges.set(bridge.id, bridge);
 		await this.saveBridge(bridge);
+		this.hubEvents.emit("bridgeConnected", {
+			bridgeId: session.bridgeId,
+			connectionGeneration: session.connectionGeneration,
+			generation: session.bridgeGeneration,
+		});
 		if (!this.isCurrentSession(session)) return;
 		for (const running of session.runningShards.values()) {
 			const assignment = this.assignments.get(running.shardId);
@@ -151,6 +156,7 @@ export abstract class HubProtocolController extends HubRoutingController {
 		) {
 			throw new ShardingProtocolError("Bridge heartbeat generation is stale.");
 		}
+		session.send("hub.heartbeat", message.id, { sentAt: heartbeat.sentAt });
 	}
 
 	protected handleIdentifyRequest(session: HubBridgeSession, message: ParsedWireMessage): void {
@@ -244,8 +250,12 @@ export abstract class HubProtocolController extends HubRoutingController {
 		this.completePendingStart(session, identity);
 		if (state === "ready") {
 			this.clearRestartState(identity.shardId);
+			this.hubEvents.emit("shardReady", { bridgeId: session.bridgeId, shardId: identity.shardId });
 		} else if (state === "failed") {
+			this.hubEvents.emit("shardFailed", { bridgeId: session.bridgeId, shardId: identity.shardId });
 			this.scheduleRestart(session, identity);
+		} else if (state === "stopped") {
+			this.hubEvents.emit("shardStopped", { bridgeId: session.bridgeId, shardId: identity.shardId });
 		}
 	}
 
@@ -273,6 +283,7 @@ export abstract class HubProtocolController extends HubRoutingController {
 		this.pendingIds.delete(message.id);
 		session.runningShards.delete(identity.shardId);
 		this.shards.set(identity.shardId, shard);
+		this.hubEvents.emit("shardStopped", { bridgeId: session.bridgeId, shardId: identity.shardId });
 		pending.resolve();
 	}
 

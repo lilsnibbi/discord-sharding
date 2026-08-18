@@ -158,6 +158,41 @@ export class ManagedShardProcess {
 		await withTimeout(sendOperation, this.#options.requestTimeoutMs, `IPC send to shard ${this.shardId} timed out.`);
 	}
 
+	/**
+	 * Terminates an unresponsive shard without recording an intentional stop.
+	 *
+	 * The exit is reported as a failure so the Hub restarts the shard under its
+	 * restart policy. A cooperative shutdown message is deliberately skipped
+	 * because a process that stopped answering cannot act on one.
+	 */
+	public async terminate(): Promise<void> {
+		if (this.#exitSettled) return;
+		const processHandle = this.#process;
+		if (processHandle === undefined) return;
+		if (this.#startupTimer !== undefined) clearTimeout(this.#startupTimer);
+		this.#startupTimer = undefined;
+		let softFailure: unknown;
+		try {
+			processHandle.kill();
+		} catch (cause) {
+			softFailure = cause;
+		}
+		if (softFailure === undefined && (await settlesWithin(this.#exitPromise, this.#options.shutdownTimeoutMs))) return;
+		try {
+			processHandle.kill(9);
+		} catch (cause) {
+			throw new ShardingTransportError(`Could not force-terminate shard ${this.shardId}.`, {
+				cause:
+					softFailure === undefined
+						? cause
+						: new AggregateError([softFailure, cause], `Shard ${this.shardId} termination signals failed.`),
+			});
+		}
+		if (!(await settlesWithin(this.#exitPromise, this.#options.shutdownTimeoutMs))) {
+			throw new ShardingTimeoutError(`Shard ${this.shardId} did not exit after force termination.`);
+		}
+	}
+
 	public stop(shutdownMessage: object | undefined): Promise<void> {
 		if (this.#stopPromise !== undefined) return this.#stopPromise;
 		const operation = this.#performStop(shutdownMessage);
