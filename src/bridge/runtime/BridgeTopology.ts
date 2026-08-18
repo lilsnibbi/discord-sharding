@@ -5,7 +5,7 @@ import {
 	ShardingTransportError,
 } from "../../errors/ShardingError";
 import { serializeError } from "../../internal/errors";
-import { MAX_SHARDS } from "../../internal/limits";
+import { MAX_BRIDGES, MAX_SHARDS } from "../../internal/limits";
 import { createRequestId } from "../../internal/validation";
 import { createWireMessage, requireExactKeys } from "../../protocol/codec";
 import { readArray, readInteger, readShardId, readString } from "../../protocol/readers";
@@ -31,7 +31,7 @@ export abstract class BridgeTopology extends BridgeShards {
 	): Promise<void> {
 		requireExactKeys(
 			message.data,
-			new Set(["assignments", "bridgeGeneration", "connectionGeneration", "topologyVersion", "totalShards"]),
+			new Set(["assignments", "bridgeGeneration", "cluster", "connectionGeneration", "topologyVersion", "totalShards"]),
 			"hub.sync data",
 		);
 		if (readString(message.data, "bridgeGeneration") !== this.generation) {
@@ -51,6 +51,17 @@ export abstract class BridgeTopology extends BridgeShards {
 			if (shardId >= totalShards) throw new ShardingProtocolError("Hub assignment shardId exceeds totalShards.");
 			if (nextAssignments.has(shardId)) throw new ShardingProtocolError(`Duplicate assignment for shard ${shardId}.`);
 			nextAssignments.set(shardId, readInteger(record, "epoch", 1, Number.MAX_SAFE_INTEGER));
+		}
+		const cluster = readArray(message.data, "cluster", MAX_BRIDGES);
+		const nextCluster: { readonly bridgeId: string; readonly shardCount: number }[] = [];
+		const seenBridges = new Set<string>();
+		for (const value of cluster) {
+			const record = copyRecord(value, "Hub cluster entry");
+			requireExactKeys(record, new Set(["bridgeId", "shardCount"]), "Hub cluster entry");
+			const bridgeId = readString(record, "bridgeId");
+			if (seenBridges.has(bridgeId)) throw new ShardingProtocolError(`Duplicate cluster entry for Bridge ${bridgeId}.`);
+			seenBridges.add(bridgeId);
+			nextCluster.push(Object.freeze({ bridgeId, shardCount: readInteger(record, "shardCount", 0, MAX_SHARDS) }));
 		}
 		if (topologyVersion < this.connectionTopologyVersion) {
 			throw new ShardingProtocolError("Hub topology version cannot move backwards.");
@@ -93,6 +104,7 @@ export abstract class BridgeTopology extends BridgeShards {
 		this.topologyVersion = topologyVersion;
 		this.connectionTopologyVersion = topologyVersion;
 		this.totalShards = totalShards;
+		this.clusterBridges = Object.freeze(nextCluster);
 		await this.synchronizeMaintenance(message.id);
 	}
 
@@ -140,6 +152,7 @@ export abstract class BridgeTopology extends BridgeShards {
 			}, this.options.request.timeoutMs);
 			this.syncAcknowledgements.set(id, { shardId: managed.shardId, timer });
 			try {
+				await this.sendShardTopology(managed);
 				await this.sendShard(managed, "shard.control.maintenance", id, {
 					acknowledge: true,
 					maintenance: false,
@@ -202,6 +215,7 @@ export abstract class BridgeTopology extends BridgeShards {
 			totalShards,
 			assignmentEpoch,
 			processGeneration,
+			this.id,
 		);
 		const managedOptions: ManagedShardOptions = {
 			args: this.options.args,

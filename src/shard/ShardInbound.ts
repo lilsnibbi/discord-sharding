@@ -93,6 +93,9 @@ export class ShardInbound<Client extends $DiscordClient> extends ShardCore<Clien
 			case "shard.control.maintenance":
 				await this.handleMaintenanceMessage(message);
 				return;
+			case "shard.control.topology":
+				this.handleTopologyMessage(message);
+				return;
 			case "shard.control.identify.response":
 			case "shard.control.route.response":
 			case "shard.control.eval.response":

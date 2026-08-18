@@ -29,6 +29,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -87,6 +88,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -159,6 +161,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 2,
 				totalShards: 2,
@@ -206,6 +209,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -300,6 +304,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -345,6 +350,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:reconnected", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 2,
 				topologyVersion: 1,
 				totalShards: 2,
@@ -377,6 +383,7 @@ describe("BridgeClient routing and analytics", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,

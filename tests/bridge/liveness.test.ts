@@ -41,6 +41,7 @@ describe("Bridge liveness deadlines", () => {
 			hub.send("hub.sync", "sync:1", {
 				assignments: [{ epoch: 3, shardId: 0 }],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,

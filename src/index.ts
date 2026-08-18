@@ -51,8 +51,10 @@ export type {
 export type {
 	$BroadcastEvaluator,
 	$ShardBridge,
+	$ShardBridgeSummary,
 	$ShardClientOptions,
 	$ShardClientState,
+	$ShardIdentity,
 	$ShardMessageContext,
 	$ShardMessageListener,
 	$ShardRequestHandler,

@@ -19,6 +19,11 @@ export interface AssignmentData {
 	readonly shardId: number;
 }
 
+export interface BridgeSummaryData {
+	readonly bridgeId: string;
+	readonly shardCount: number;
+}
+
 export interface AnalyticsData extends ShardIdentityData {
 	readonly collectedAt: number;
 	readonly payload: unknown;
@@ -135,6 +140,7 @@ export interface WireDataMap {
 	readonly "hub.sync": {
 		readonly assignments: readonly AssignmentData[];
 		readonly bridgeGeneration: string;
+		readonly cluster: readonly BridgeSummaryData[];
 		readonly connectionGeneration: number;
 		readonly topologyVersion: number;
 		readonly totalShards: number;
@@ -217,6 +223,12 @@ export interface WireDataMap {
 		readonly commandId: string;
 		readonly reason: string;
 	};
+	readonly "shard.control.topology": {
+		readonly bridgeId: string;
+		readonly bridges: readonly BridgeSummaryData[];
+		readonly topologyVersion: number;
+		readonly totalShards: number;
+	};
 }
 
 export type WireMessageType = keyof WireDataMap;
@@ -289,6 +301,7 @@ export const BRIDGE_TO_SHARD_TYPES: ReadonlySet<WireMessageType> = new Set([
 	"shard.control.route.request",
 	"shard.control.route.response",
 	"shard.control.shutdown",
+	"shard.control.topology",
 ]);
 
 export const ALL_WIRE_TYPES: ReadonlySet<WireMessageType> = new Set([

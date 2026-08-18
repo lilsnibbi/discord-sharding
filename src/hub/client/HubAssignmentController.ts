@@ -17,6 +17,20 @@ import {
 } from "./utilities";
 
 export abstract class HubAssignmentController extends HubRestartController {
+	protected clusterSummary(): readonly { readonly bridgeId: string; readonly shardCount: number }[] {
+		const counts = new Map<string, number>();
+		for (const bridgeId of this.bridges.keys()) counts.set(bridgeId, 0);
+		for (const assignment of this.assignments.values()) {
+			if (isReleasedAssignment(assignment)) continue;
+			counts.set(assignment.bridgeId, (counts.get(assignment.bridgeId) ?? 0) + 1);
+		}
+		return Object.freeze(
+			[...counts.entries()]
+				.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+				.map(([bridgeId, shardCount]) => Object.freeze({ bridgeId, shardCount })),
+		);
+	}
+
 	protected synchronizeSession(session: HubBridgeSession): Promise<void> {
 		if (session.phase === "closed") return Promise.reject(new ShardingStateError("Bridge session is closed."));
 		const id = createRequestId(`sync-${session.bridgeId}`);
@@ -34,6 +48,7 @@ export abstract class HubAssignmentController extends HubRestartController {
 			session.send("hub.sync", id, {
 				assignments: Object.freeze(assignments),
 				bridgeGeneration: session.bridgeGeneration,
+				cluster: this.clusterSummary(),
 				connectionGeneration: session.connectionGeneration,
 				topologyVersion: this.topologyVersion,
 				totalShards: this.shardCount,

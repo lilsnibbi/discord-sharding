@@ -195,6 +195,7 @@ export function buildEnvironment(
 	totalShards: number,
 	assignmentEpoch: number,
 	processGeneration: number,
+	bridgeId: string,
 ): Readonly<Record<string, string>> {
 	const environment: Record<string, string> = Object.create(null);
 	for (const [key, value] of Object.entries(Bun.env)) {
@@ -217,6 +218,7 @@ export function buildEnvironment(
 	environment.SHARDING_TOTAL_SHARDS = String(totalShards);
 	environment.SHARDING_ASSIGNMENT_EPOCH = String(assignmentEpoch);
 	environment.SHARDING_PROCESS_GENERATION = String(processGeneration);
+	environment.SHARDING_BRIDGE_ID = bridgeId;
 	if (Object.keys(environment).length > MAX_ENVIRONMENT_ENTRIES) {
 		throw new ShardingConfigurationError(`Child environment cannot exceed ${MAX_ENVIRONMENT_ENTRIES} entries.`);
 	}

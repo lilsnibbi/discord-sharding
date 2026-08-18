@@ -139,6 +139,7 @@ describe("BridgeClient lifecycle and connection limits", () => {
 			const syncData = {
 				assignments: [],
 				bridgeGeneration: bridge.generation,
+				cluster: [],
 				connectionGeneration: 1,
 				topologyVersion: 1,
 				totalShards: 2,

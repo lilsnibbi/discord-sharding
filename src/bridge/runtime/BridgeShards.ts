@@ -154,6 +154,7 @@ export abstract class BridgeShards extends BridgeRequests {
 		if (totalShards !== this.totalShards) {
 			throw new ShardingProtocolError("Shard boot totalShards does not match the synchronized topology.");
 		}
+		await this.sendShardTopology(managed);
 		const id = createRequestId(`maintenance-${managed.shardId}`);
 		await this.sendShard(managed, "shard.control.maintenance", id, {
 			acknowledge: false,

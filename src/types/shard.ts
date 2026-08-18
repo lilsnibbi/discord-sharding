@@ -7,6 +7,78 @@ import type { $DiscordClient } from "./discord";
 export type $ShardClientState = "idle" | "running" | "closing" | "closed" | "failed";
 
 /**
+ * Shard count summary for one Bridge known to the Hub.
+ */
+export interface $ShardBridgeSummary {
+	/**
+	 * Stable Bridge identifier.
+	 */
+	readonly bridgeId: string;
+
+	/**
+	 * Number of shards currently assigned to that Bridge.
+	 */
+	readonly shardCount: number;
+}
+
+/**
+ * Frozen self-description of one shard process.
+ *
+ * Constructed from spawn-time identity and updated from Hub topology
+ * synchronization. Read {@link ShardClient.identity} again after a
+ * maintenance window to observe topology changes.
+ */
+export interface $ShardIdentity {
+	/**
+	 * Unique identifier of this shard process incarnation.
+	 */
+	readonly instanceId: string;
+
+	/**
+	 * Zero-based Discord shard identifier.
+	 */
+	readonly shardId: number;
+
+	/**
+	 * Global Discord shard count.
+	 */
+	readonly totalShards: number;
+
+	/**
+	 * Hub-issued ownership version for this shard process.
+	 */
+	readonly assignmentEpoch: number;
+
+	/**
+	 * Local process version used to reject messages from older restarts.
+	 */
+	readonly processGeneration: number;
+
+	/**
+	 * Identifier of the Bridge this shard is connected to, or `null` before
+	 * the Bridge has reported it.
+	 */
+	readonly bridgeId: string | null;
+
+	/**
+	 * Number of shards assigned to this shard's Bridge, or `0` before the
+	 * first topology report.
+	 */
+	readonly bridgeShardCount: number;
+
+	/**
+	 * Number of Bridges known to the Hub, or `0` before the first topology
+	 * report.
+	 */
+	readonly totalBridges: number;
+
+	/**
+	 * Shard count summary for every Bridge known to the Hub.
+	 */
+	readonly bridges: readonly $ShardBridgeSummary[];
+}
+
+/**
  * Bridge maintenance state available inside a shard process.
  */
 export interface $ShardBridge {
@@ -124,6 +196,11 @@ export interface $ShardClientOptions {
 	 * Local process version. Reads `SHARDING_PROCESS_GENERATION` when omitted.
 	 */
 	readonly processGeneration?: number;
+
+	/**
+	 * Owning Bridge identifier. Reads `SHARDING_BRIDGE_ID` when omitted.
+	 */
+	readonly bridgeId?: string;
 
 	/**
 	 * Bridge transport. Uses Bun process IPC when omitted.

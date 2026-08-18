@@ -53,6 +53,7 @@ export abstract class BridgeCore {
 	protected connectionTopologyVersion = 0;
 	protected topologyVersion = 0;
 	protected totalShards = 0;
+	protected clusterBridges: readonly { readonly bridgeId: string; readonly shardCount: number }[] = Object.freeze([]);
 	protected connectionReady = false;
 	protected maintenance = true;
 	protected lifecycleState: $BridgeState = "idle";
@@ -185,6 +186,16 @@ export abstract class BridgeCore {
 		if (!BRIDGE_TO_SHARD_TYPES.has(type)) throw new ShardingProtocolError(`${type} cannot be sent to a shard.`);
 		const message = createWireMessage(type, id, data, this.payloadPolicy);
 		await managed.send(message);
+	}
+
+	protected async sendShardTopology(managed: ManagedShardProcess): Promise<void> {
+		if (this.topologyVersion === 0) return;
+		await this.sendShard(managed, "shard.control.topology", createRequestId(`topology-${managed.shardId}`), {
+			bridgeId: this.id,
+			bridges: this.clusterBridges,
+			topologyVersion: this.topologyVersion,
+			totalShards: this.totalShards,
+		});
 	}
 
 	protected async setDisconnected(cause: Error): Promise<void> {
