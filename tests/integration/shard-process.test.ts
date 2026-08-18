@@ -13,7 +13,15 @@ interface FixtureReport {
 	readonly totalShards: number;
 }
 
-function createHub(databasePath: string, errors: string[]): HubClient {
+async function reserveFreePort(): Promise<number> {
+	const server = Bun.serve({ fetch: () => new Response("reserved"), hostname: "127.0.0.1", port: 0 });
+	const port: number | undefined = server.port;
+	await server.stop(true);
+	if (port === undefined) throw new Error("Could not reserve a free port.");
+	return port;
+}
+
+function createHub(databasePath: string, errors: string[], port = 0): HubClient {
 	return new HubClient({
 		adminToken: "admin-token-0001",
 		botToken: "discord-token-01",
@@ -29,9 +37,25 @@ function createHub(databasePath: string, errors: string[]): HubClient {
 			),
 		hostname: "127.0.0.1",
 		onError: (error, context) => errors.push(`${context}: ${error.message}`),
-		port: 0,
+		port,
 		totalShards: TOTAL_SHARDS,
 	});
+}
+
+async function waitFor(predicate: () => boolean, description: string, timeoutMs = 30_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() <= deadline) {
+		if (predicate()) return;
+		await Bun.sleep(25);
+	}
+	throw new Error(`Timed out waiting for ${description}.`);
+}
+
+function shardGenerations(bridge: BridgeClient): string {
+	return [...bridge.shards.values()]
+		.map((entry) => `${entry.shardId}:${entry.state}:${entry.processGeneration}`)
+		.sort()
+		.join(" ");
 }
 
 async function collectReports(directory: string, timeoutMs: number): Promise<Map<number, FixtureReport>> {
@@ -94,6 +118,57 @@ describe("real Bun shard subprocesses", () => {
 			await $`rm -rf ${workspace}`.quiet().nothrow();
 		}
 		expect(bridgeErrors).toEqual([]);
+		expect(hubErrors).toEqual([]);
+	}, 90_000);
+	test("keeps shard processes alive across a Hub outage and resumes without restarting them", async () => {
+		const workspace = `${import.meta.dir}/../../.tmp/hub-outage-${Bun.randomUUIDv7()}`;
+		await Bun.write(`${workspace}/.keep`, "");
+		const port = await reserveFreePort();
+		const databasePath = `${workspace}/hub.sqlite`;
+		const hubErrors: string[] = [];
+		const bridgeErrors: string[] = [];
+		let hub = createHub(databasePath, hubErrors, port);
+		let bridge: BridgeClient | undefined;
+		try {
+			await hub.start();
+			bridge = new BridgeClient({
+				analyticsPath: `${workspace}/bridge.sqlite`,
+				env: { SHARDING_FIXTURE_OUTPUT: workspace },
+				hubUrl: `http://127.0.0.1:${port}`,
+				id: "bridge-outage",
+				maxShards: TOTAL_SHARDS,
+				onError: (error, context) => bridgeErrors.push(`${context}: ${error.message}`),
+				reconnect: { initialDelayMs: 100, jitterRatio: 0, maxDelayMs: 500, multiplier: 2 },
+				shardScript: FIXTURE,
+				token: "bridge-token-0001",
+			});
+			await bridge.start();
+			await bridge.waitUntilConnected(20_000);
+			await waitFor(
+				() =>
+					bridge?.shards.size === TOTAL_SHARDS && [...bridge.shards.values()].every((entry) => entry.state === "ready"),
+				"every shard Discord-ready",
+			);
+			const before = shardGenerations(bridge);
+
+			await hub.stop();
+			await waitFor(() => bridge?.isInMaintenance === true, "maintenance after Hub loss");
+			await Bun.sleep(500);
+			expect(bridge.shards.size).toBe(TOTAL_SHARDS);
+
+			hub = createHub(databasePath, hubErrors, port);
+			await hub.start();
+			await waitFor(() => bridge?.isInMaintenance === false, "maintenance cleared after the Hub returned");
+			await waitFor(
+				() => hub.getTopology().bridges.some((entry) => entry.readyShardIds.length === TOTAL_SHARDS),
+				"every shard Discord-ready again",
+			);
+			expect(shardGenerations(bridge)).toBe(before);
+		} finally {
+			await bridge?.stop();
+			await hub.stop();
+			await $`rm -rf ${workspace}`.quiet().nothrow();
+		}
 		expect(hubErrors).toEqual([]);
 	}, 90_000);
 });
