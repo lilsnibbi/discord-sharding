@@ -1,5 +1,8 @@
 # Architecture
 
+For implementation-level detail with file references, see the
+[architecture deep dive](architecture/overview.md).
+
 Sharding has one mandatory control path:
 
 ```text

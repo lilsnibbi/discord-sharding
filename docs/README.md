@@ -66,6 +66,9 @@ Control plane design, identify scheduling, sticky assignments, IPC routing, and 
 
 - [API reference](api-reference.md)
 - [Architecture](architecture.md)
+- [Architecture deep dive](architecture/overview.md)
+- [Shard identity](shard-identity.md)
+- [Hub events](hub-events.md)
 
 </td>
 <td valign="top">
@@ -75,6 +78,8 @@ Control plane design, identify scheduling, sticky assignments, IPC routing, and 
 - [Operations](operations.md)
 - [Troubleshooting](troubleshooting.md)
 - [Performance](performance.md)
+- [Testing](testing.md)
+- [Known limitations](known-limitations.md)
 
 </td>
 </tr>
