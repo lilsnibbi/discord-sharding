@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start at the first failing boundary: configuration, SQLite, Hub server, Bridge WebSocket, Bun subprocess, IPC,
+Start at the first failing boundary: configuration, Redis, Hub server, Bridge WebSocket, Bun subprocess, IPC,
 Discord identify admission, routing, or application handling.
 
 Capture the Bun and package versions, lifecycle state, Bridge and shard identifiers, assignment epoch, process
@@ -10,8 +10,8 @@ or guild data.
 ## Hub does not start
 
 1. Confirm `bridgeToken` and `adminToken` are distinct non-empty values, and that `botToken` is non-empty.
-2. Confirm `databasePath` or a custom persistence implementation is supplied, but not an invalid combination.
-3. Check SQLite file path, permissions, directory existence, disk space, and migration logs.
+2. Confirm `redisUrl`/`keyPrefix` or a custom persistence implementation is supplied, but not an invalid combination.
+3. Check Redis reachability, credentials, TLS scheme, server version (7.2 or newer), and `maxmemory-policy`.
 4. Confirm Discord's Gateway Bot endpoint is reachable and returned a valid shard recommendation and session limit.
    Transport failures are retried with backoff, so a reported failure means Discord stayed unavailable. HTTP 401 and
    403 are raised immediately and mean the bot token was rejected.
@@ -88,8 +88,11 @@ Prefer ordinary targeted requests for complex or privileged application behaviou
 Analytics are retained by design. Export what is required, then clear with a cutoff and bounded batch size. Monitor
 Hub and Bridge SQLite paths separately.
 
-If migration validation or Hub startup reports a checksum mismatch or a missing applied migration, stop and restore
-the exact released migration history. Never edit an applied migration.
+If Hub startup reports an unsupported stored schema version, the Redis key namespace was written by a different
+release. Point the Hub at an empty `keyPrefix` or restore the matching release. Never hand-edit Hub-owned keys.
+
+If Redis evicts Hub keys, assignments silently disappear. Hub keys carry no TTL, so set `maxmemory-policy noeviction`
+on the server or give the Hub its own Redis instance.
 
 ## Package imports fail
 

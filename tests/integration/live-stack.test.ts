@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
+import { RedisHubPersistence } from "../../src/hub/redis/RedisHubPersistence";
 import type { $HubEventName, $ShardIdentity } from "../../src/index";
 import { BridgeClient, HubClient } from "../../src/index";
+import { FakeRedisClient } from "../utilities/fake-redis";
 
 const token = process.env.TOKEN;
 const TOTAL_SHARDS = 2;
@@ -46,7 +48,7 @@ describe.skipIf(token === undefined || token.length === 0)("live full stack (rea
 			adminToken: "admin-token-0001",
 			botToken: token,
 			bridgeToken: "bridge-token-0001",
-			databasePath: `${workspace}/hub.sqlite`,
+			persistence: new RedisHubPersistence("redis://127.0.0.1:6379", "live-stack", new FakeRedisClient()),
 			hostname: "127.0.0.1",
 			onError: (error, context) => hubErrors.push(`${context}: ${error.message}`),
 			port: 0,

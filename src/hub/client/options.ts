@@ -14,14 +14,15 @@ import {
 import type { $Sleep } from "../../types/common";
 import type { $GatewayFetch, $HubClientOptions } from "../../types/hub";
 import {
-	DEFAULT_DATABASE_PATH,
 	DEFAULT_EVALUATION_COMMIT_LEAD_MS,
 	DEFAULT_GATEWAY_ENDPOINT,
 	DEFAULT_HOSTNAME,
+	DEFAULT_KEY_PREFIX,
 	DEFAULT_MAX_BUFFERED_BYTES,
 	DEFAULT_MAX_EVALUATIONS,
 	DEFAULT_MAX_QUEUED_MESSAGES,
 	DEFAULT_PORT,
+	DEFAULT_REDIS_URL,
 	OPTION_KEYS,
 } from "./constants";
 import { normalizeHubPersistence } from "./persistenceAdapter";
@@ -38,12 +39,12 @@ export function normalizeOptions(input: $HubClientOptions): NormalizedHubOptions
 		throw new ShardingConfigurationError("bridgeToken and adminToken must be different secrets.");
 	}
 	const persistence = normalizeHubPersistence(options.persistence);
-	const databasePath =
-		options.databasePath === undefined
-			? DEFAULT_DATABASE_PATH
-			: requireBoundedString(options.databasePath, "databasePath", 32_768);
-	if (persistence !== undefined && options.databasePath !== undefined) {
-		throw new ShardingConfigurationError("Provide persistence or databasePath, not both.");
+	const redisUrl =
+		options.redisUrl === undefined ? DEFAULT_REDIS_URL : requireBoundedString(options.redisUrl, "redisUrl", 32_768);
+	const keyPrefix =
+		options.keyPrefix === undefined ? DEFAULT_KEY_PREFIX : requireBoundedString(options.keyPrefix, "keyPrefix", 256);
+	if (persistence !== undefined && (options.redisUrl !== undefined || options.keyPrefix !== undefined)) {
+		throw new ShardingConfigurationError("Provide persistence or redisUrl and keyPrefix, not both.");
 	}
 	const totalShards =
 		options.totalShards === undefined ? undefined : requireTotalShards(options.totalShards, "totalShards");
@@ -93,11 +94,11 @@ export function normalizeOptions(input: $HubClientOptions): NormalizedHubOptions
 		adminToken,
 		botToken,
 		bridgeToken,
-		databasePath,
 		evaluationCommitLeadMs,
 		fetch: fetcher,
 		gatewayEndpoint,
 		hostname,
+		keyPrefix,
 		maxBufferedBytes,
 		maxEvaluations,
 		maxQueuedMessages,
@@ -106,6 +107,7 @@ export function normalizeOptions(input: $HubClientOptions): NormalizedHubOptions
 		payload,
 		...(persistence === undefined ? {} : { persistence }),
 		port,
+		redisUrl,
 		request,
 		sleep,
 		...(totalShards === undefined ? {} : { totalShards }),

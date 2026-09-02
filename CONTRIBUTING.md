@@ -21,7 +21,7 @@ bun run verify
 ```
 
 `verify` runs exactly what CI runs, in the same order: type-check, documentation links, documentation examples, import
-policy, public JSDoc, migrations, formatting and lint, tests, coverage, performance budgets, release metadata, and the
+policy, public JSDoc, formatting and lint, tests, coverage, performance budgets, release metadata, and the
 packed-archive consumer check. Run it before opening a pull request.
 
 Useful subsets while iterating:
@@ -56,22 +56,25 @@ The full command list lives in the [README](README.md) and the [documentation hu
 ## Tests
 
 Tests use `bun:test` and live under `tests/`. Use the deterministic fakes for process, clock, Discord, WebSocket,
-SQLite, and persistence — a normal test must never require live Discord or any external service.
+Redis, and persistence — a normal test must never require live Discord or any external service.
 
 Cover both the success path and the failed-cleanup path for lifecycle and protocol changes. Assignment transfers,
 identify buckets, stale generations, backpressure, request expiry, and broadcast prepare/commit deserve extra
 scrutiny. Package-wide coverage must stay at or above 80%.
 
-## Database migrations
+## Hub storage
 
-Migrations are directory-format SQL under `migrations/` and are authoritative over any code.
+The Hub stores state in Redis and has no migration directory. Conditional writes are server-side Lua in
+`src/hub/redis/scripts.ts`, mirrored in TypeScript by `tests/utilities/fake-redis.ts` so unit tests stay offline.
+Change both together, then validate against a real server:
 
 ```bash
-bun run db:new -- short_name   # scaffold migrations/<timestamp>_<slug>/migration.sql
-bun run db:check               # apply every migration to an in-memory database and assert tables
+redis-server --port 6390 --daemonize yes
+SHARDING_REDIS_URL=redis://127.0.0.1:6390 bun run test:redis
 ```
 
-Never edit a migration that has already been released. Add a new one.
+Bumping the stored schema version is a breaking change: a Hub refuses to start against a namespace written by an
+incompatible release.
 
 ## Pull requests
 

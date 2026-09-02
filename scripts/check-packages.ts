@@ -11,7 +11,6 @@ import { BUN_EXECUTABLE, ROOT_DIRECTORY } from "./repository";
 import { runInherited } from "./run";
 
 const temporaryBase = `${ROOT_DIRECTORY}/.tmp`;
-const migrationArchiveFile = /^package\/migrations\/([0-9]{14}_[a-z0-9]+(?:_[a-z0-9]+)*)\/(migration\.sql)$/;
 
 /**
  * Packs, inspects, installs, type-checks, and executes the package. When a
@@ -85,7 +84,6 @@ async function inspectTarball(tarball: string, destination: string): Promise<$Va
 	]) {
 		if (!listing.includes(path)) throw new Error(`Package archive is missing ${path}`);
 	}
-	validateMigrationArchive(listing);
 	if (!listing.some((path) => path.startsWith("package/examples/") && path.endsWith(".ts"))) {
 		throw new Error("Package archive contains no TypeScript examples");
 	}
@@ -234,31 +232,8 @@ function isReviewedArchivePath(path: string): boolean {
 		path === "package/LICENSE" ||
 		(path.startsWith("package/src/") && path.endsWith(".ts")) ||
 		(path.startsWith("package/docs/") && path.endsWith(".md")) ||
-		migrationArchiveFile.test(path) ||
 		(path.startsWith("package/examples/") && path.endsWith(".ts"))
 	);
-}
-
-function validateMigrationArchive(listing: readonly string[]): void {
-	const directories = new Map<string, Set<string>>();
-	for (const path of listing) {
-		if (!path.startsWith("package/migrations/")) continue;
-		const match = migrationArchiveFile.exec(path);
-		const directory = match?.[1];
-		const filename = match?.[2];
-		if (directory === undefined || filename === undefined) {
-			throw new Error(`Package archive contains an unexpected migration path: ${path}`);
-		}
-		const files = directories.get(directory) ?? new Set<string>();
-		files.add(filename);
-		directories.set(directory, files);
-	}
-	if (directories.size === 0) throw new Error("Package archive contains no migration directories");
-	for (const [directory, files] of directories) {
-		if (files.size !== 1 || !files.has("migration.sql")) {
-			throw new Error(`Migration ${directory} must contain only migration.sql`);
-		}
-	}
 }
 
 function assertTemporaryPath(path: string): void {

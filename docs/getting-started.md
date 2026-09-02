@@ -11,18 +11,16 @@ bun add @lilsnibbi/discord-sharding
 Add `discord.js` v14 in the bot application if it is not already present. Sharding uses a structural client contract
 and does not import or bundle it.
 
-## 2. Prepare SQLite
+## 2. Prepare Redis
 
-Specify a file path for Hub persistence (or default to `./sharding-hub.sqlite`):
+Run Redis or Valkey 7.2 or newer and point the Hub at it:
 
 ```powershell
-$env:SHARDING_DATABASE_PATH = "./sharding-hub.sqlite"
+$env:SHARDING_REDIS_URL = "redis://127.0.0.1:6379"
 ```
 
-`HubClient.start()` applies the migrations packaged with the installed library before it accepts traffic. Installed
-consumers do not run this repository's `db:*` scripts. A deployment that checks out this repository may use
-`bun run db:check` to validate migration consistency or `bun run db:migrate` to apply the same migrations ahead of
-startup.
+Enable AOF persistence (`appendonly yes`) so a crash cannot lose recent assignment writes. There is no migration
+step — `HubClient.start()` stamps and validates a schema version key before it accepts traffic.
 
 ## 3. Start the Hub
 
@@ -31,7 +29,7 @@ Use the [Hub entrypoint](../examples/hub.ts). It requires:
 - the Discord bot token for Gateway Bot metadata;
 - a high-entropy Bridge token;
 - a different high-entropy administration token;
-- the SQLite database path (`databasePath`).
+- the Redis connection URL (`redisUrl`) and optional key namespace (`keyPrefix`).
 
 Expose the Hub through TLS in production. Restrict its administrative HTTP surface separately from Bridge WebSocket
 traffic.
@@ -41,7 +39,7 @@ traffic.
 Use the [Bridge entrypoint](../examples/bridge.ts). Give every deployment a stable `id`, the same Bridge token, its
 actual process capacity, and the shared shard script.
 
-`start()` returns after local SQLite is ready and the reconnect loop has begun. Use `waitUntilConnected()` only when an
+`start()` returns after local analytics storage is ready and the reconnect loop has begun. Use `waitUntilConnected()` only when an
 external readiness gate needs confirmed Hub and shard synchronization.
 
 A reconnect by the same running `BridgeClient` keeps its process generation and sticky ownership. A replacement
@@ -72,7 +70,7 @@ Before production, verify:
 - stopping the Hub enters maintenance without ending healthy Discord sessions;
 - Hub recovery clears maintenance only after topology synchronization;
 - targeted messages and requests cross between two Bridges;
-- graceful Bridge shutdown releases subprocesses, sockets, timers, requests, and SQLite;
+- graceful Bridge shutdown releases subprocesses, sockets, timers, requests, and local SQLite;
 - the explicit dead-Bridge release procedure is understood and access-controlled.
 
 Continue with [operations](operations.md) for deployment policy or [troubleshooting](troubleshooting.md) for failures.

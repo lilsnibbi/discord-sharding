@@ -1,7 +1,7 @@
 # Testing
 
 How this package is verified, layer by layer. Normal tests never need live Discord — deterministic fakes
-cover process, clock, Discord, WebSocket, SQLite, and persistence boundaries.
+cover process, clock, Discord, WebSocket, Redis, and persistence boundaries.
 
 ## Harness layers
 
@@ -10,7 +10,7 @@ cover process, clock, Discord, WebSocket, SQLite, and persistence boundaries.
 | `tests/hub/client-harness.ts` | HubClient logic | `Bun.serve` (monkey-patched), sockets, persistence | `tests/hub/client-*.test.ts` |
 | `tests/bridge/client-harness.ts` | BridgeClient logic | Hub WebSocket, shard process factory | `tests/bridge/*.test.ts` |
 | `tests/utilities/runtime-stack.ts` | Hub HTTP/WS server, BridgeClient, ShardClient, routing | Discord client, shard processes (in-process), persistence | `tests/integration/runtime-stack.test.ts`, fault injection, performance |
-| `tests/fixtures/shard-process.ts` | Everything incl. Bun subprocesses + SQLite | Discord client | `tests/integration/shard-process*.test.ts` |
+| `tests/fixtures/shard-process.ts` | Everything incl. Bun subprocesses + storage | Discord client | `tests/integration/shard-process*.test.ts` |
 | `tests/utilities/live-gateway-client.ts` | Everything incl. the real Discord gateway | nothing | `tests/integration/live-*.test.ts` (TOKEN-gated) |
 
 ## Live verification (TOKEN-gated)

@@ -38,7 +38,6 @@
 	},
 	"files": [
 		"src",
-		"migrations",
 		"examples",
 		"docs",
 		"README.md",
@@ -50,6 +49,7 @@
 		"bun",
 		"discord",
 		"ipc",
+		"redis",
 		"sharding",
 		"websocket"
 	],
@@ -67,9 +67,6 @@
 		"check:lines": "bun scripts/check-lines.ts",
 		"check:fix": "biome check --write .",
 		"clean": "bun scripts/clean.ts",
-		"db:check": "bun scripts/database.ts check",
-		"db:migrate": "bun scripts/database.ts migrate",
-		"db:new": "bun scripts/database.ts new",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
 		"lint": "biome lint .",
@@ -80,7 +77,7 @@
 		"test": "bun test --path-ignore-patterns 'tests/performance/**'",
 		"test:coverage": "bun scripts/coverage.ts",
 		"test:performance": "bun test tests/performance",
-		"test:sqlite": "bun test tests/integration/sqlite.test.ts",
+		"test:redis": "bun test tests/integration/redis.test.ts",
 		"typecheck": "bunx --bun --no-install tsc --project tsconfig.json --noEmit",
 		"verify": "bun scripts/verify.ts"
 	},

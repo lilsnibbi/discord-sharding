@@ -1,51 +1,42 @@
-import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { ShardingConfigurationError, ShardingPersistenceError } from "../../src/errors/ShardingError";
-import { SQLiteHubPersistence } from "../../src/hub/database/SQLiteHubPersistence";
+import { RedisHubPersistence } from "../../src/hub/redis/RedisHubPersistence";
 import {
-	mapAssignmentRows,
-	mapBridgeRows,
-	mapShardRows,
+	decodeAssignments,
+	decodeBridges,
+	decodeShards,
 	normalizeAssignment,
 	normalizeBridge,
 	normalizeShard,
-} from "../../src/hub/database/SQLiteHubRecords";
-import { runSQLiteMigrations } from "../../src/hub/database/SQLiteMigrationRunner";
+} from "../../src/hub/redis/RedisHubRecords";
+import { FakeRedisClient } from "../utilities/fake-redis";
 import { createHub, installFakeServe, openBridge, synchronizeBridge, waitFor } from "./client-harness";
+
+const REDIS_URL = "redis://127.0.0.1:6379";
+
+function openStore(client: FakeRedisClient, prefix = "hub"): RedisHubPersistence {
+	return new RedisHubPersistence(REDIS_URL, prefix, client);
+}
 
 describe("Hub Recovery & Persistence Diagnostics", () => {
 	test("restarts Hub with 3 persisted Bridges cleanly without unnecessary stop/start commands", async () => {
 		const installed = installFakeServe();
-		const path = `${import.meta.dir}/recovery-3bridges-${Bun.randomUUIDv7()}.sqlite`;
-		const setupStore = new SQLiteHubPersistence(path);
+		const redis = new FakeRedisClient();
+		const setupStore = openStore(redis.connection());
 		try {
 			await setupStore.migrate();
-			await setupStore.saveBridge({
-				connected: false,
-				generation: "gen-a",
-				id: "bridge-a",
-				maxShards: 2,
-				updatedAt: 100,
-			});
-			await setupStore.saveBridge({
-				connected: false,
-				generation: "gen-b",
-				id: "bridge-b",
-				maxShards: 2,
-				updatedAt: 100,
-			});
-			await setupStore.saveBridge({
-				connected: false,
-				generation: "gen-c",
-				id: "bridge-c",
-				maxShards: 2,
-				updatedAt: 100,
-			});
-
+			for (const id of ["a", "b", "c"]) {
+				await setupStore.saveBridge({
+					connected: false,
+					generation: `gen-${id}`,
+					id: `bridge-${id}`,
+					maxShards: 2,
+					updatedAt: 100,
+				});
+			}
 			await setupStore.saveAssignment({ bridgeId: "bridge-a", epoch: 10, shardId: 0, updatedAt: 100 });
 			await setupStore.saveAssignment({ bridgeId: "bridge-b", epoch: 10, shardId: 1, updatedAt: 100 });
 			await setupStore.saveAssignment({ bridgeId: "bridge-c", epoch: 10, shardId: 2, updatedAt: 100 });
-
 			await setupStore.saveShard({
 				assignmentEpoch: 10,
 				bridgeId: "bridge-a",
@@ -74,7 +65,7 @@ describe("Hub Recovery & Persistence Diagnostics", () => {
 			await setupStore.close();
 		}
 
-		const hub = createHub(new SQLiteHubPersistence(path), { totalShards: 3 });
+		const hub = createHub(openStore(redis.connection()), { totalShards: 3 });
 		try {
 			await hub.start();
 			expect(hub.getTopology().assignments.length).toBe(3);
@@ -108,16 +99,12 @@ describe("Hub Recovery & Persistence Diagnostics", () => {
 		} finally {
 			await hub.stop();
 			installed.restore();
-			for (const f of [path, `${path}-wal`, `${path}-shm`]) {
-				const file = Bun.file(f);
-				if (await file.exists()) await file.delete();
-			}
 		}
 	});
 
-	test("fails closed if database is empty but bridge reports retained processes", async () => {
+	test("fails closed if storage is empty but bridge reports retained processes", async () => {
 		const installed = installFakeServe();
-		const hub = createHub(new SQLiteHubPersistence(":memory:"), { totalShards: 2 });
+		const hub = createHub(openStore(new FakeRedisClient()), { totalShards: 2 });
 		try {
 			await hub.start();
 			const bridge = await openBridge(installed.server, 1, false, "gen-a", "bridge-a");
@@ -129,7 +116,7 @@ describe("Hub Recovery & Persistence Diagnostics", () => {
 				restartPolicy: { initialDelayMs: 1000, maxAttempts: 5, maxDelayMs: 30000, windowMs: 60000 },
 				runningShards: [{ assignmentEpoch: 1, processGeneration: 1, ready: true, shardId: 0 }],
 			});
-			await waitFor(() => bridge.socket.closeCode !== undefined, "socket closed on empty db with retained shards");
+			await waitFor(() => bridge.socket.closeCode !== undefined, "socket closed on empty storage with retained shards");
 			expect(bridge.socket.closeCode).toBe(1002);
 		} finally {
 			await hub.stop();
@@ -137,17 +124,15 @@ describe("Hub Recovery & Persistence Diagnostics", () => {
 		}
 	});
 
-	test("detects migration checksum drift and missing migration errors", async () => {
-		const db = new Database(":memory:", { strict: true });
-		try {
-			await runSQLiteMigrations(db);
-			db.run(
-				"UPDATE __sharding_migrations SET checksum = '0000000000000000000000000000000000000000000000000000000000000000' WHERE name = '20260726054837_initial'",
-			);
-			await expect(runSQLiteMigrations(db)).rejects.toBeInstanceOf(ShardingPersistenceError);
-		} finally {
-			db.close();
-		}
+	test("isolates two Hubs that share one Redis server behind different key prefixes", async () => {
+		const redis = new FakeRedisClient();
+		const first = openStore(redis.connection(), "bot-one");
+		const second = openStore(redis.connection(), "bot-two");
+		await first.migrate();
+		await second.migrate();
+		await first.saveAssignment({ bridgeId: "bridge-a", epoch: 1, shardId: 0, updatedAt: 10 });
+		expect((await first.loadState()).assignments).toHaveLength(1);
+		expect((await second.loadState()).assignments).toHaveLength(0);
 	});
 
 	test("validates unexpected keys and accessor properties on record objects", () => {
@@ -180,10 +165,20 @@ describe("Hub Recovery & Persistence Diagnostics", () => {
 		expect(() => normalizeAssignment(getterObj)).toThrow(ShardingConfigurationError);
 	});
 
-	test("rejects malformed row data in query mappers", () => {
-		expect(() => mapAssignmentRows("not-an-array")).toThrow(ShardingPersistenceError);
-		expect(() => mapBridgeRows([{ id: "b-1" }])).toThrow(ShardingPersistenceError);
-		expect(() => mapShardRows([{ shard_id: "not-a-number" }])).toThrow(ShardingPersistenceError);
+	test("rejects malformed hash replies in record decoders", () => {
+		expect(() => decodeAssignments("not-a-hash")).toThrow(ShardingPersistenceError);
+		expect(() => decodeAssignments(["0"])).toThrow(ShardingPersistenceError);
+		expect(() => decodeAssignments({ 0: "{not json" })).toThrow(ShardingPersistenceError);
+		expect(() => decodeBridges({ "bridge-a": JSON.stringify({ id: "bridge-a" }) })).toThrow(ShardingPersistenceError);
+		expect(() => decodeShards({ 0: JSON.stringify({ shardId: "not-a-number" }) })).toThrow(ShardingPersistenceError);
+		expect(decodeAssignments(null)).toEqual([]);
+	});
+
+	test("decodes a RESP2 flat-array hash reply and rejects malformed entries", () => {
+		const assignment = { bridgeId: "bridge-a", epoch: 1, shardId: 0, updatedAt: 10 };
+		expect(decodeAssignments(["0", JSON.stringify(assignment)])).toEqual([assignment]);
+		expect(() => decodeAssignments([0, JSON.stringify(assignment)])).toThrow(ShardingPersistenceError);
+		expect(() => decodeAssignments(["0", 42])).toThrow(ShardingPersistenceError);
 	});
 
 	test("validates released assignment tombstones with leading underscores", () => {
@@ -196,8 +191,8 @@ describe("Hub Recovery & Persistence Diagnostics", () => {
 		expect(tombstone.bridgeId).toBe("__released__:0");
 	});
 
-	test("releases disconnected Bridge assignments and persists tombstones cleanly to SQLite", async () => {
-		const persistence = new SQLiteHubPersistence(":memory:");
+	test("releases disconnected Bridge assignments and persists tombstones cleanly to Redis", async () => {
+		const persistence = openStore(new FakeRedisClient());
 		await persistence.migrate();
 		await persistence.saveBridge({
 			connected: false,

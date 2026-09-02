@@ -13,11 +13,11 @@ export interface NormalizedHubOptions {
 	readonly adminToken: string;
 	readonly botToken: string;
 	readonly bridgeToken: string;
-	readonly databasePath: string;
 	readonly evaluationCommitLeadMs: number;
 	readonly fetch: $GatewayFetch;
 	readonly gatewayEndpoint: string | URL;
 	readonly hostname: string;
+	readonly keyPrefix: string;
 	readonly maxBufferedBytes: number;
 	readonly maxEvaluations: number;
 	readonly maxQueuedMessages: number;
@@ -26,6 +26,7 @@ export interface NormalizedHubOptions {
 	readonly payload: $PayloadPolicy;
 	readonly persistence?: HubPersistenceAdapter;
 	readonly port: number;
+	readonly redisUrl: string;
 	readonly request: $RequestPolicy;
 	readonly sleep: $Sleep;
 	readonly totalShards?: number;

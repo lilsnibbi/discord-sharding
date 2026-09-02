@@ -5,7 +5,7 @@ export const EXPECTED_PACKAGE_NAME = "@lilsnibbi/discord-sharding";
 export const EXPECTED_ENTRY_POINT = "./src/index.ts";
 
 /** Files and directories intentionally included in the package. */
-export const EXPECTED_FILES = ["src", "migrations", "examples", "docs", "README.md", "SECURITY.md", "LICENSE"] as const;
+export const EXPECTED_FILES = ["src", "examples", "docs", "README.md", "SECURITY.md", "LICENSE"] as const;
 
 /** Exact production packages used by the raw TypeScript source. */
 export const EXPECTED_DEPENDENCIES = {
@@ -17,7 +17,7 @@ const EXPECTED_HOMEPAGE = "https://github.com/lilsnibbi/discord-sharding#readme"
 const EXPECTED_BUGS_URL = "https://github.com/lilsnibbi/discord-sharding/issues";
 const EXPECTED_REPOSITORY_URL = "git+https://github.com/lilsnibbi/discord-sharding.git";
 const EXPECTED_DESCRIPTION = "Bun-native Discord shard orchestration across Hub, Bridge, and shard processes.";
-const EXPECTED_KEYWORDS = ["bun", "discord", "ipc", "sharding", "websocket"] as const;
+const EXPECTED_KEYWORDS = ["bun", "discord", "ipc", "redis", "sharding", "websocket"] as const;
 const EXPECTED_DEV_DEPENDENCIES = {
 	"@biomejs/biome": "2.5.5",
 	"@types/bun": "1.3.14",
@@ -32,9 +32,6 @@ const EXPECTED_SCRIPTS = {
 	"check:jsdoc": "bun scripts/check-jsdoc.ts",
 	"check:lines": "bun scripts/check-lines.ts",
 	clean: "bun scripts/clean.ts",
-	"db:check": "bun scripts/database.ts check",
-	"db:migrate": "bun scripts/database.ts migrate",
-	"db:new": "bun scripts/database.ts new",
 	format: "biome format --write .",
 	"format:check": "biome format .",
 	lint: "biome lint .",
@@ -45,7 +42,7 @@ const EXPECTED_SCRIPTS = {
 	test: "bun test --path-ignore-patterns 'tests/performance/**'",
 	"test:coverage": "bun scripts/coverage.ts",
 	"test:performance": "bun test tests/performance",
-	"test:sqlite": "bun test tests/integration/sqlite.test.ts",
+	"test:redis": "bun test tests/integration/redis.test.ts",
 	typecheck: "bunx --bun --no-install tsc --project tsconfig.json --noEmit",
 	verify: "bun scripts/verify.ts",
 } as const satisfies Readonly<Record<string, string>>;
@@ -183,7 +180,7 @@ export function validatePackageManifest(value: unknown, packed: boolean): $Valid
 
 	const files = requireStringArray(manifest.files, `${context} files`);
 	if (!sameStringSet(files, EXPECTED_FILES)) {
-		throw new Error(`${name} must publish only raw source, migrations, examples, and complete package documentation`);
+		throw new Error(`${name} must publish only raw source, examples, and complete package documentation`);
 	}
 
 	const exportsMap = requireRecord(manifest.exports, `${context} exports`);

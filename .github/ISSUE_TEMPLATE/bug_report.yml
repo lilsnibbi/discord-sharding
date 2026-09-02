@@ -37,7 +37,7 @@ body:
         - BridgeClient
         - ShardClient
         - Protocol or codec
-        - SQLite persistence or migrations
+        - Redis or SQLite persistence
         - Tooling, scripts, or CI
         - Documentation
     validations:

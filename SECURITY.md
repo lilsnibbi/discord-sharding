@@ -15,7 +15,7 @@ Reports are in scope when they affect:
 - Bridge or administration authentication;
 - WebSocket or Bun IPC validation and generation fencing;
 - shard assignment, identify admission, routing, request correlation, or broadcast evaluation;
-- Bun SQLite persistence, migration application, or analytics handling performed by this package;
+- Bun Redis or SQLite persistence, or analytics handling performed by this package;
 - subprocess lifecycle, resource cleanup, backpressure, or packaged source integrity.
 
 Vulnerabilities in Bun, Discord, `discord.js`, reverse proxies, application handlers, or deployment configuration

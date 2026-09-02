@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
+import { RedisHubPersistence } from "../../src/hub/redis/RedisHubPersistence";
 import { BridgeClient, HubClient } from "../../src/index";
+import { FakeRedisClient } from "../utilities/fake-redis";
 
 const TOTAL_SHARDS = 2;
 const FIXTURE = `${import.meta.dir}/../fixtures/shard-process.ts`;
@@ -21,12 +23,11 @@ async function reserveFreePort(): Promise<number> {
 	return port;
 }
 
-function createHub(databasePath: string, errors: string[], port = 0): HubClient {
+function createHub(redis: FakeRedisClient, errors: string[], port = 0): HubClient {
 	return new HubClient({
 		adminToken: "admin-token-0001",
 		botToken: "discord-token-01",
 		bridgeToken: "bridge-token-0001",
-		databasePath,
 		fetch: () =>
 			Promise.resolve(
 				Response.json({
@@ -37,6 +38,7 @@ function createHub(databasePath: string, errors: string[], port = 0): HubClient 
 			),
 		hostname: "127.0.0.1",
 		onError: (error, context) => errors.push(`${context}: ${error.message}`),
+		persistence: new RedisHubPersistence("redis://127.0.0.1:6379", "hub", redis.connection()),
 		port,
 		totalShards: TOTAL_SHARDS,
 	});
@@ -80,7 +82,7 @@ describe("real Bun shard subprocesses", () => {
 		await Bun.write(`${workspace}/.keep`, "");
 		const hubErrors: string[] = [];
 		const bridgeErrors: string[] = [];
-		const hub = createHub(`${workspace}/hub.sqlite`, hubErrors);
+		const hub = createHub(new FakeRedisClient(), hubErrors);
 		let bridge: BridgeClient | undefined;
 		try {
 			await hub.start();
@@ -124,10 +126,10 @@ describe("real Bun shard subprocesses", () => {
 		const workspace = `${import.meta.dir}/../../.tmp/hub-outage-${Bun.randomUUIDv7()}`;
 		await Bun.write(`${workspace}/.keep`, "");
 		const port = await reserveFreePort();
-		const databasePath = `${workspace}/hub.sqlite`;
+		const redis = new FakeRedisClient();
 		const hubErrors: string[] = [];
 		const bridgeErrors: string[] = [];
-		let hub = createHub(databasePath, hubErrors, port);
+		let hub = createHub(redis, hubErrors, port);
 		let bridge: BridgeClient | undefined;
 		try {
 			await hub.start();
@@ -156,7 +158,7 @@ describe("real Bun shard subprocesses", () => {
 			await Bun.sleep(500);
 			expect(bridge.shards.size).toBe(TOTAL_SHARDS);
 
-			hub = createHub(databasePath, hubErrors, port);
+			hub = createHub(redis, hubErrors, port);
 			await hub.start();
 			await waitFor(() => bridge?.isInMaintenance === false, "maintenance cleared after the Hub returned");
 			await waitFor(

@@ -27,16 +27,27 @@ export interface $HubClientOptions {
 	readonly adminToken: string;
 
 	/**
-	 * SQLite path used by built-in Hub storage.
+	 * Redis connection URL used by built-in Hub storage.
 	 *
-	 * Use `":memory:"` only for tests or intentionally ephemeral deployments.
+	 * Enable AOF persistence on the server. With snapshot-only durability a
+	 * crash can lose recent assignment writes, letting a restarted Hub load a
+	 * stale ownership epoch.
 	 *
-	 * @defaultValue `"./sharding-hub.sqlite"`
+	 * @defaultValue `"redis://127.0.0.1:6379"`
 	 */
-	readonly databasePath?: string;
+	readonly redisUrl?: string;
 
 	/**
-	 * Custom Hub storage. Usually omitted in favour of {@link databasePath}.
+	 * Key namespace applied to every Redis key owned by this Hub.
+	 *
+	 * Give each bot its own prefix when several Hubs share one Redis server.
+	 *
+	 * @defaultValue `"sharding"`
+	 */
+	readonly keyPrefix?: string;
+
+	/**
+	 * Custom Hub storage. Usually omitted in favour of {@link redisUrl}.
 	 */
 	readonly persistence?: $HubPersistence;
 

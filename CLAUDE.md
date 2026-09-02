@@ -18,7 +18,7 @@ bun run check:examples   # type-checks every ts fence in markdown and JSDoc @exa
 bun run check:imports    # import/type policy (see "Enforced policies")
 bun run check:jsdoc      # public API JSDoc + $-prefix + src/types placement
 bun run test             # bun test, excludes tests/performance
-bun run test:sqlite      # native file-backed SQLite integration test
+bun run test:redis       # live Redis integration test, skipped unless SHARDING_REDIS_URL is set
 bun run test:coverage    # LCOV, package-wide 80% minimum enforced by scripts/coverage.ts
 bun run test:performance # tests/performance budgets
 bun run pack:check       # packs, installs, type-checks and runs the raw-source archive
@@ -32,12 +32,15 @@ bun test tests/hub/client-routing.test.ts
 bun test --test-name-pattern "rebalance"
 ```
 
-Migrations (directory-format SQL under `migrations/`, authoritative over any code):
+Hub storage is Redis (Bun's native `RedisClient`), so there is no migration directory and no schema DDL. The Hub
+stamps a `<keyPrefix>:schema` version key during startup and refuses to run against an unsupported one. Conditional
+writes are server-side Lua in [src/hub/redis/scripts.ts](src/hub/redis/scripts.ts) — changing a script changes stored
+semantics, so update both the Lua and the TypeScript mirror in
+[tests/utilities/fake-redis.ts](tests/utilities/fake-redis.ts), then confirm against a real server:
 
 ```bash
-bun run db:check                      # applies all migrations to :memory: and asserts tables
-bun run db:new -- short_name          # scaffolds migrations/<timestamp>_<slug>/migration.sql
-SHARDING_DATABASE_PATH=./x.sqlite bun run db:migrate
+redis-server --port 6390 --daemonize yes
+SHARDING_REDIS_URL=redis://127.0.0.1:6390 bun run test:redis
 ```
 
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the same steps as `bun run verify`. Never publish, push, deploy, tag, or release unless explicitly asked.
@@ -50,7 +53,7 @@ Three processes, one mandatory control path. See [docs/architecture.md](docs/arc
 HubClient  --(authenticated WebSocket)-->  BridgeClient  --(Bun IPC)-->  ShardClient + Discord client
 ```
 
-- **`src/hub`** ([HubClient.ts](src/hub/HubClient.ts)) — one Hub per bot. Sole assignment authority (sticky `shardId` to Bridge mapping with an ownership epoch), owner of the single global Discord identify scheduler, WebSocket routing, HTTP admin API, and Bun SQLite persistence. `HubClient` is a thin facade over a chain of composed controllers: `HubCore` (shared state maps) → `HubServerController` → `HubProtocolController` → `HubRoutingController` → `HubAssignmentController` → `HubRestartController` → `HubLifecycle`. Add behavior to the controller that owns that lifecycle stage, not to `HubClient`.
+- **`src/hub`** ([HubClient.ts](src/hub/HubClient.ts)) — one Hub per bot. Sole assignment authority (sticky `shardId` to Bridge mapping with an ownership epoch), owner of the single global Discord identify scheduler, WebSocket routing, HTTP admin API, and Bun Redis persistence. `HubClient` is a thin facade over a chain of composed controllers: `HubCore` (shared state maps) → `HubServerController` → `HubProtocolController` → `HubRoutingController` → `HubAssignmentController` → `HubRestartController` → `HubLifecycle`. Add behavior to the controller that owns that lifecycle stage, not to `HubClient`.
 - **`src/bridge`** ([BridgeClient.ts](src/bridge/BridgeClient.ts)) — one Bridge per deployment host. `BridgeClient` delegates to `BridgeRuntime`, itself composed from `BridgeCore`/`BridgeConnection`/`BridgeShards`/`BridgeTopology`/`BridgeRequests`. Supervises Bun subprocesses (`ManagedShardProcess`), reconnects with bounded backoff, and keeps local SQLite analytics.
 - **`src/shard`** ([ShardClient.ts](src/shard/ShardClient.ts)) — application-facing. `ShardClient` extends `ShardInbound`; `login()` waits for a Hub identify grant before touching the application's Discord client.
 - **`src/protocol`** — versioned wire envelopes ([types.ts](src/protocol/types.ts)), [codec.ts](src/protocol/codec.ts) key validation, [readers.ts](src/protocol/readers.ts) typed field readers.
@@ -81,7 +84,7 @@ These are validated by scripts and will fail CI, so follow them while writing ra
 
 ## Tests
 
-`bun:test`, rooted at `tests/` (see [bunfig.toml](bunfig.toml)). Use deterministic fakes for process, clock, Discord, WebSocket, SQLite, and persistence — normal tests must never need live Discord or external services. Shared harnesses (`tests/hub/client-harness.ts`, `tests/bridge/client-harness.ts`) stay separate from focused suites. Cover both success and failed-cleanup paths for lifecycle and protocol changes; assignment transfers, identify buckets, stale generations, backpressure, request expiry, and broadcast prepare/commit deserve extra scrutiny.
+`bun:test`, rooted at `tests/` (see [bunfig.toml](bunfig.toml)). Use deterministic fakes for process, clock, Discord, WebSocket, Redis, and persistence — normal tests must never need live Discord or external services. Shared harnesses (`tests/hub/client-harness.ts`, `tests/bridge/client-harness.ts`) stay separate from focused suites. Cover both success and failed-cleanup paths for lifecycle and protocol changes; assignment transfers, identify buckets, stale generations, backpressure, request expiry, and broadcast prepare/commit deserve extra scrutiny.
 
 ## Scope
 

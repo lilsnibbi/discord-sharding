@@ -8,7 +8,7 @@
 
 <br />
 
-<code>Bun</code> <code>TypeScript</code> <code>SQLite</code> <code>ArkType</code> <code>Discord.js</code>
+<code>Bun</code> <code>TypeScript</code> <code>Redis</code> <code>ArkType</code> <code>Discord.js</code>
 
 </div>
 
@@ -42,7 +42,7 @@ Detailed documentation of public classes, options, interfaces, methods, and admi
 
 ### [Architecture](architecture.md)
 
-Control plane design, identify scheduling, sticky assignments, IPC routing, and SQLite storage.
+Control plane design, identify scheduling, sticky assignments, IPC routing, and Redis storage.
 
 </td>
 </tr>

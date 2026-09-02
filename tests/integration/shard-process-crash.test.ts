@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
+import { RedisHubPersistence } from "../../src/hub/redis/RedisHubPersistence";
 import { BridgeClient, HubClient } from "../../src/index";
+import { FakeRedisClient } from "../utilities/fake-redis";
 
 const TOTAL_SHARDS = 1;
 const SHARD_ID = 0;
@@ -18,12 +20,11 @@ interface ObservedEvent {
 	readonly shardId: number;
 }
 
-function createHub(databasePath: string, errors: string[]): HubClient {
+function createHub(errors: string[]): HubClient {
 	return new HubClient({
 		adminToken: "admin-token-0001",
 		botToken: "discord-token-01",
 		bridgeToken: "bridge-token-0001",
-		databasePath,
 		fetch: () =>
 			Promise.resolve(
 				Response.json({
@@ -34,6 +35,7 @@ function createHub(databasePath: string, errors: string[]): HubClient {
 			),
 		hostname: "127.0.0.1",
 		onError: (error, context) => errors.push(`${context}: ${error.message}`),
+		persistence: new RedisHubPersistence("redis://127.0.0.1:6379", "hub", new FakeRedisClient()),
 		port: 0,
 		totalShards: TOTAL_SHARDS,
 	});
@@ -72,7 +74,7 @@ describe("shard subprocess crash recovery", () => {
 		const bridgeErrors: string[] = [];
 		const events: ObservedEvent[] = [];
 		const count = (name: ObservedEvent["name"]): number => events.filter((event) => event.name === name).length;
-		const hub = createHub(`${workspace}/hub.sqlite`, hubErrors);
+		const hub = createHub(hubErrors);
 		hub.events.on("shardFailed", (payload) => {
 			events.push({ name: "shardFailed", shardId: payload.shardId });
 		});

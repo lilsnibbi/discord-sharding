@@ -15,7 +15,7 @@ HubClient  --(authenticated WebSocket)-->  BridgeClient  --(Bun IPC)-->  ShardCl
 
 | Process | One per | Owns |
 | --- | --- | --- |
-| Hub | bot | assignments, identify scheduling, routing, admin HTTP, SQLite state |
+| Hub | bot | assignments, identify scheduling, routing, admin HTTP, Redis state |
 | Bridge | deployment host | shard subprocesses, reconnect loop, local analytics SQLite |
 | Shard | Discord shard | one application Discord client |
 

@@ -1,6 +1,7 @@
 export const DEFAULT_HOSTNAME = "0.0.0.0";
 export const DEFAULT_PORT = 3_000;
-export const DEFAULT_DATABASE_PATH = "./sharding-hub.sqlite";
+export const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379";
+export const DEFAULT_KEY_PREFIX = "sharding";
 export const DEFAULT_GATEWAY_ENDPOINT = "https://discord.com/api/v10/gateway/bot";
 export const DEFAULT_MAX_BUFFERED_BYTES = 4_194_304;
 export const DEFAULT_MAX_QUEUED_MESSAGES = 1_024;
@@ -15,11 +16,11 @@ export const OPTION_KEYS = new Set([
 	"adminToken",
 	"botToken",
 	"bridgeToken",
-	"databasePath",
 	"evaluationCommitLeadMs",
 	"fetch",
 	"gatewayEndpoint",
 	"hostname",
+	"keyPrefix",
 	"maxBufferedBytes",
 	"maxEvaluations",
 	"maxQueuedMessages",
@@ -28,6 +29,7 @@ export const OPTION_KEYS = new Set([
 	"payload",
 	"persistence",
 	"port",
+	"redisUrl",
 	"request",
 	"sleep",
 	"totalShards",

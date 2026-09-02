@@ -11,7 +11,7 @@ Sharding has one mandatory control path:
                          | assignment | identify |      |
                          | routing | administration     |
                          +---------------+--------------+
-                                         | Bun SQLite (bun:sqlite)
+                                         | Redis (Bun RedisClient)
                  authenticated WebSocket |
                          +---------------+--------------+
                          | BridgeClient                  |
@@ -83,8 +83,8 @@ A shard process that exits between a Hub decision and the local delivery is an e
 answers the waiting Hub with a failure for that shard and keeps its connection, so one dead process never drops the
 remaining shards on that host into maintenance.
 
-Bridge startup prepares local SQLite and begins reconnecting without waiting for Hub availability. Hub startup applies
-SQLite migrations and restores durable state before accepting traffic.
+Bridge startup prepares local SQLite and begins reconnecting without waiting for Hub availability. Hub startup
+validates its stored Redis schema version and restores durable state before accepting traffic.
 
 ## Protocol boundaries
 
@@ -98,10 +98,12 @@ Protocol validation protects framing; application code must still validate its o
 
 ## Storage
 
-- Hub SQLite stores assignments, latest Bridge and shard state, and global analytics.
+- Hub Redis stores assignments, latest Bridge and shard state, and global analytics, namespaced by `keyPrefix`.
+- Hub writes that must not regress run as server-side Lua, so a stale epoch or timestamp is rejected atomically.
+- Redis needs AOF persistence; snapshot-only durability can lose recent assignment writes across a crash.
 - Bridge SQLite stores local process and Discord analytics.
 - Analytics have no automatic retention. Operators clear them explicitly in bounded batches.
 - Database handles are owned by their client and close during rollback or shutdown.
 
-Runtime package source uses Bun-native SQLite, HTTP, WebSocket, subprocess, and IPC capabilities. Directory-format
-SQL migrations remain authoritative; exact `arktype@2.2.3` supports schema and runtime validation. `discord.js` remains an optional application-owned peer.
+Runtime package source uses Bun-native Redis, SQLite, HTTP, WebSocket, subprocess, and IPC capabilities. Exact
+`arktype@2.2.3` supports schema and runtime validation. `discord.js` remains an optional application-owned peer.

@@ -29,7 +29,7 @@ validators, timers, and managed-process records are not public entrypoints.
 ## `HubClient`
 
 `HubClient` owns the HTTP and WebSocket control plane, global Discord identify admission, shard assignment, routing,
-Bun SQLite persistence, and administration.
+Bun Redis persistence, and administration.
 
 ### Lifecycle and administration
 
@@ -47,7 +47,7 @@ Bun SQLite persistence, and administration.
 | `stop()` | Idempotently stops admission, sockets, pending work, server, scheduler, and persistence |
 | `[Symbol.asyncDispose]()` | Calls `stop()` for `await using` ownership |
 
-Hub startup does not accept traffic until migrations and durable state restoration succeed. Startup failure rolls back
+Hub startup does not accept traffic until the schema check and durable state restoration succeed. Startup failure rolls back
 every opened resource.
 
 ### `$HubClientOptions`
@@ -57,7 +57,8 @@ every opened resource.
 | `botToken` | yes | Discord token used only for Gateway Bot metadata |
 | `bridgeToken` | yes | Token accepted only by Bridge WebSocket connections |
 | `adminToken` | yes | Token accepted only by administration requests |
-| `databasePath` | no | Built-in SQLite file path (default `./sharding-hub.sqlite`; explicitly allow `":memory:"`) |
+| `redisUrl` | no | Redis connection URL (default `redis://127.0.0.1:6379`) |
+| `keyPrefix` | no | Namespace for every Hub-owned Redis key (default `sharding`) |
 | `persistence` | conditional | Custom `$HubPersistence`, mainly for deterministic tests and integrations |
 | `totalShards` | no | Explicit global count; otherwise Discord's recommendation |
 | `hostname` | no | Listener hostname; default `0.0.0.0` |
@@ -73,7 +74,7 @@ every opened resource.
 | `now`, `wallClock`, `sleep` | no | Deterministic scheduler and persistence hooks |
 | `onError` | no | Observer for background failures not returned by a caller promise |
 
-Supply either databasePath (or use default `./sharding-hub.sqlite`) or custom persistence, but not both. `bridgeToken` and
+Supply either `redisUrl`/`keyPrefix` (or use their defaults) or custom persistence, but not both. `bridgeToken` and
 `adminToken` must be distinct.
 
 ### HTTP administration
@@ -111,12 +112,12 @@ reconnect loop, routing correlation, and cleanup.
 
 | Method | Behaviour |
 | --- | --- |
-| `start()` | Opens SQLite and starts the indefinite Hub reconnect loop; returns this client |
+| `start()` | Opens local SQLite and starts the indefinite Hub reconnect loop; returns this client |
 | `waitUntilConnected(timeoutMs?)` | Waits for topology synchronization, with a default bounded deadline |
 | `onMaintenanceChange(listener)` | Registers an observer and returns an idempotent cleanup callback |
 | `getAnalytics(query?)` | Reads newest-first local SQLite analytics, optionally filtered by shard |
 | `clearAnalytics(before?, batchSize?)` | Deletes local samples in bounded batches and returns the total |
-| `stop()` | Idempotently closes reconnect work, socket, requests, subprocesses, listeners, timers, and SQLite |
+| `stop()` | Idempotently closes reconnect work, socket, requests, subprocesses, listeners, timers, and local SQLite |
 | `[Symbol.asyncDispose]()` | Calls `stop()` |
 
 ### `$BridgeClientOptions`
@@ -124,7 +125,7 @@ reconnect loop, routing correlation, and cleanup.
 Required options are `id`, `hubUrl`, `token`, `maxShards`, and `shardScript`. `hubUrl` is the Hub HTTP origin; the
 Bridge derives its WebSocket endpoint.
 
-Optional settings cover shard arguments, working directory, environment, SQLite path, reconnect and restart policy,
+Optional settings cover shard arguments, working directory, environment, local SQLite path, reconnect and restart policy,
 request and payload policy, startup and shutdown deadlines, buffered bytes, deterministic process and socket
 factories, sleep and jitter hooks, and background error reporting.
 

@@ -7,7 +7,6 @@ for (const script of [
 	"check:examples",
 	"check:imports",
 	"check:jsdoc",
-	"db:check",
 	"check",
 	"test",
 	"test:coverage",

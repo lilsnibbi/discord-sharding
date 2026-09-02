@@ -22,9 +22,6 @@ async function validateRequiredFiles(): Promise<void> {
 			throw new Error(`Required package file is missing: ${path}`);
 		}
 	}
-	if ((await globFiles(`${ROOT_DIRECTORY}/migrations`, "*/migration.sql")).length === 0) {
-		throw new Error("At least one directory-format SQL migration is required");
-	}
 	if ((await globFiles(`${ROOT_DIRECTORY}/examples`, "*.ts")).length === 0) {
 		throw new Error("At least one TypeScript example is required");
 	}

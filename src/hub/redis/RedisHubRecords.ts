@@ -50,40 +50,20 @@ const Analytics = type({
 	id: Identifier,
 	shardId: ShardId.or("null"),
 });
-const AssignmentRow = type({
-	"+": "reject",
-	bridge_id: Identifier,
-	epoch: PositiveInteger,
-	shard_id: ShardId,
-	updated_at: NonNegativeInteger,
-});
-const BridgeRow = type({
-	"+": "reject",
-	connected: "0 | 1",
-	generation: Identifier,
-	id: Identifier,
-	max_shards: MaxShards,
-	updated_at: NonNegativeInteger,
-});
-const ShardRow = type({
-	"+": "reject",
-	assignment_epoch: PositiveInteger,
-	bridge_id: Identifier,
-	process_generation: PositiveInteger,
-	shard_id: ShardId,
-	state: ShardState,
-	updated_at: NonNegativeInteger,
-});
 
-interface NormalizedAnalyticsRecord {
-	readonly bridgeId: string;
-	readonly collectedAt: number;
-	readonly dataJson: string;
+/** Validated analytics record paired with its stored JSON encoding. */
+export interface EncodedAnalyticsRecord {
+	/** Unique record identifier used as the hash field and sorted-set member. */
 	readonly id: string;
-	readonly shardId: number | null;
+
+	/** Collection time in Unix milliseconds, used as the sorted-set score. */
+	readonly collectedAt: number;
+
+	/** JSON encoding written to the analytics record hash. */
+	readonly json: string;
 }
 
-/** Validates an assignment before a SQLite write. */
+/** Validates an assignment before a Redis write. */
 export function normalizeAssignment(value: unknown): $PersistedAssignment {
 	const result = Assignment(snapshotConfigurationRecord(value, "Assignment"));
 	if (result instanceof type.errors) {
@@ -92,7 +72,7 @@ export function normalizeAssignment(value: unknown): $PersistedAssignment {
 	return Object.freeze(result);
 }
 
-/** Validates a Bridge record before a SQLite write. */
+/** Validates a Bridge record before a Redis write. */
 export function normalizeBridge(value: unknown): $PersistedBridge {
 	const result = Bridge(snapshotConfigurationRecord(value, "Bridge"));
 	if (result instanceof type.errors) {
@@ -101,7 +81,7 @@ export function normalizeBridge(value: unknown): $PersistedBridge {
 	return Object.freeze(result);
 }
 
-/** Validates a shard record before a SQLite write. */
+/** Validates a shard record before a Redis write. */
 export function normalizeShard(value: unknown): $PersistedShard {
 	const result = Shard(snapshotConfigurationRecord(value, "Shard"));
 	if (result instanceof type.errors) {
@@ -110,8 +90,8 @@ export function normalizeShard(value: unknown): $PersistedShard {
 	return Object.freeze(result);
 }
 
-/** Validates and serializes an analytics record before a SQLite write. */
-export function normalizeAnalyticsRecord(value: unknown): NormalizedAnalyticsRecord {
+/** Validates and encodes an analytics record before a Redis write. */
+export function encodeAnalyticsRecord(value: unknown): EncodedAnalyticsRecord {
 	const input = snapshotConfigurationRecord(value, "Analytics record");
 	const normalizedData = normalizePayload(input.data, DEFAULT_PAYLOAD_POLICY, "Analytics record data");
 	const result = Analytics({
@@ -124,66 +104,49 @@ export function normalizeAnalyticsRecord(value: unknown): NormalizedAnalyticsRec
 	if (result instanceof type.errors) {
 		throw new ShardingConfigurationError("Analytics record is invalid.", { cause: result });
 	}
-	const dataJson = JSON.stringify(result.data);
-	if (dataJson === undefined) {
+	const json = JSON.stringify(result);
+	if (json === undefined) {
 		throw new ShardingConfigurationError("Analytics record data could not be serialized.");
 	}
-	return Object.freeze({
-		bridgeId: result.bridgeId,
-		collectedAt: result.collectedAt,
-		dataJson,
-		id: result.id,
-		shardId: result.shardId,
-	});
+	return Object.freeze({ collectedAt: result.collectedAt, id: result.id, json });
 }
 
-/** Maps and validates assignment rows returned by SQLite. */
-export function mapAssignmentRows(value: unknown): readonly $PersistedAssignment[] {
-	return mapRows(value, "Assignments query", (row) => {
-		const result = AssignmentRow(row);
+/** Encodes a validated record as the JSON stored in a Redis hash field. */
+export function encodeRecord(value: object, name: string): string {
+	const json = JSON.stringify(value);
+	if (json === undefined) throw new ShardingPersistenceError(`${name} could not be serialized.`);
+	return json;
+}
+
+/** Decodes and validates every assignment held in a Redis hash reply. */
+export function decodeAssignments(reply: unknown): readonly $PersistedAssignment[] {
+	return decodeHash(reply, "Assignments", (record) => {
+		const result = Assignment(record);
 		if (result instanceof type.errors) throw result;
-		return Object.freeze({
-			bridgeId: result.bridge_id,
-			epoch: result.epoch,
-			shardId: result.shard_id,
-			updatedAt: result.updated_at,
-		});
+		return Object.freeze(result);
 	});
 }
 
-/** Maps and validates Bridge rows returned by SQLite. */
-export function mapBridgeRows(value: unknown): readonly $PersistedBridge[] {
-	return mapRows(value, "Bridges query", (row) => {
-		const result = BridgeRow(row);
+/** Decodes and validates every Bridge record held in a Redis hash reply. */
+export function decodeBridges(reply: unknown): readonly $PersistedBridge[] {
+	return decodeHash(reply, "Bridges", (record) => {
+		const result = Bridge(record);
 		if (result instanceof type.errors) throw result;
-		return Object.freeze({
-			connected: result.connected === 1,
-			generation: result.generation,
-			id: result.id,
-			maxShards: result.max_shards,
-			updatedAt: result.updated_at,
-		});
+		return Object.freeze(result);
 	});
 }
 
-/** Maps and validates shard rows returned by SQLite. */
-export function mapShardRows(value: unknown): readonly $PersistedShard[] {
-	return mapRows(value, "Shards query", (row) => {
-		const result = ShardRow(row);
+/** Decodes and validates every shard record held in a Redis hash reply. */
+export function decodeShards(reply: unknown): readonly $PersistedShard[] {
+	return decodeHash(reply, "Shards", (record) => {
+		const result = Shard(record);
 		if (result instanceof type.errors) throw result;
-		return Object.freeze({
-			assignmentEpoch: result.assignment_epoch,
-			bridgeId: result.bridge_id,
-			processGeneration: result.process_generation,
-			shardId: result.shard_id,
-			state: result.state,
-			updatedAt: result.updated_at,
-		});
+		return Object.freeze(result);
 	});
 }
 
-/** Validates a bounded non-negative integer used by a SQLite operation. */
-export function requireDatabaseInteger(value: unknown, name: string, minimum: number, maximum: number): number {
+/** Validates a bounded non-negative integer used by a Redis operation. */
+export function requireStorageInteger(value: unknown, name: string, minimum: number, maximum: number): number {
 	const result = SafeInteger(value);
 	if (result instanceof type.errors || result < minimum || result > maximum) {
 		throw new ShardingPersistenceError(`${name} must be an integer from ${minimum} to ${maximum}.`, {
@@ -193,17 +156,50 @@ export function requireDatabaseInteger(value: unknown, name: string, minimum: nu
 	return result;
 }
 
-function mapRows<T>(value: unknown, name: string, mapper: (row: unknown) => T): readonly T[] {
-	if (!Array.isArray(value)) throw new ShardingPersistenceError(`${name} returned a non-array result.`);
-	const mapped: T[] = [];
-	for (let index = 0; index < value.length; index += 1) {
+function decodeHash<T>(reply: unknown, name: string, mapper: (record: unknown) => T): readonly T[] {
+	const values = readHashValues(reply, name);
+	const decoded: T[] = [];
+	for (const [field, value] of values) {
+		if (typeof value !== "string") {
+			throw new ShardingPersistenceError(`${name} field ${field} is not a string.`);
+		}
+		let parsed: unknown;
 		try {
-			mapped.push(mapper(value[index]));
+			parsed = JSON.parse(value);
 		} catch (cause) {
-			throw new ShardingPersistenceError(`${name} row ${index} is invalid.`, { cause });
+			throw new ShardingPersistenceError(`${name} field ${field} is not valid JSON.`, { cause });
+		}
+		try {
+			decoded.push(mapper(snapshotConfigurationRecord(parsed, `${name} field ${field}`)));
+		} catch (cause) {
+			throw new ShardingPersistenceError(`${name} field ${field} is invalid.`, { cause });
 		}
 	}
-	return Object.freeze(mapped);
+	return Object.freeze(decoded);
+}
+
+function readHashValues(reply: unknown, name: string): readonly (readonly [string, unknown])[] {
+	if (reply === null || reply === undefined) return [];
+	if (Array.isArray(reply)) {
+		if (reply.length % 2 !== 0) throw new ShardingPersistenceError(`${name} returned an unpaired hash reply.`);
+		const entries: (readonly [string, unknown])[] = [];
+		for (let index = 0; index < reply.length; index += 2) {
+			const field = reply[index];
+			if (typeof field !== "string") throw new ShardingPersistenceError(`${name} returned a non-string field.`);
+			entries.push([field, reply[index + 1]]);
+		}
+		return entries;
+	}
+	if (typeof reply !== "object") throw new ShardingPersistenceError(`${name} returned a non-hash reply.`);
+	const entries: (readonly [string, unknown])[] = [];
+	for (const field of Object.keys(reply)) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(reply, field);
+		if (descriptor === undefined || !("value" in descriptor)) {
+			throw new ShardingPersistenceError(`${name} returned an inspectable-unsafe hash reply.`);
+		}
+		entries.push([field, descriptor.value]);
+	}
+	return entries;
 }
 
 function isJsonValue(value: unknown): value is $JsonValue {

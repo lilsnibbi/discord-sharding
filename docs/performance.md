@@ -19,7 +19,7 @@ Measure with the intended:
 - Hub and Bridge host sizes;
 - shard and Bridge counts and declared capacity;
 - request, message, analytics, and evaluation payload distributions;
-- SQLite database latency, connection settings, and storage;
+- Redis round-trip latency, connection settings, and persistence mode;
 - Discord client cache settings and handler behaviour;
 - network latency and reconnect failure injection.
 

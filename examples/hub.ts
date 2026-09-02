@@ -10,12 +10,13 @@ const hub = await new HubClient({
 	adminToken: requireEnvironment("SHARDING_ADMIN_TOKEN"),
 	botToken: requireEnvironment("DISCORD_BOT_TOKEN"),
 	bridgeToken: requireEnvironment("SHARDING_BRIDGE_TOKEN"),
-	databasePath: Bun.env.SHARDING_DATABASE_PATH ?? "./sharding-hub.sqlite",
+	keyPrefix: Bun.env.SHARDING_KEY_PREFIX ?? "sharding",
 	hostname: Bun.env.SHARDING_HUB_HOST ?? "0.0.0.0",
 	onError(error, context) {
 		console.error(`Hub background failure (${context}).`, error);
 	},
 	port: Bun.env.SHARDING_HUB_PORT === undefined ? 3000 : requirePositiveInteger("SHARDING_HUB_PORT"),
+	redisUrl: Bun.env.SHARDING_REDIS_URL ?? "redis://127.0.0.1:6379",
 }).start();
 
 let stopping = false;

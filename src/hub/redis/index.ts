@@ -1,0 +1,1 @@
+export { RedisHubPersistence } from "./RedisHubPersistence";

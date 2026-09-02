@@ -2,9 +2,9 @@ import { ShardingStateError } from "../../errors/ShardingError";
 import { assertConfigurationKeys, snapshotConfigurationRecord } from "../../internal/configuration";
 import { requireIdentifier, requireNonNegativeInteger, requirePositiveInteger } from "../../internal/validation";
 import type { $ClearAnalyticsOptions, $HubTopology, $PersistedAssignment, $PersistedBridge } from "../../types/hub";
-import { SQLiteHubPersistence } from "../database/SQLiteHubPersistence";
 import { loadGatewayBotInfo } from "../gatewayStartup";
 import { IdentifyScheduler } from "../identify/IdentifyScheduler";
+import { RedisHubPersistence } from "../redis/RedisHubPersistence";
 import { DEFAULT_ANALYTICS_BATCH_SIZE, IDLE_ASSIGNMENT_MUTATION } from "./constants";
 import { HubServerController } from "./HubServerController";
 import { normalizeLoadedState } from "./loadedState";
@@ -33,7 +33,8 @@ export abstract class HubLifecycle extends HubServerController implements AsyncD
 
 	protected async performStart(): Promise<this> {
 		try {
-			const persistence = this.options.persistence ?? new SQLiteHubPersistence(this.options.databasePath);
+			const persistence =
+				this.options.persistence ?? new RedisHubPersistence(this.options.redisUrl, this.options.keyPrefix);
 			this.persistence = persistence;
 			await persistence.migrate();
 			const [stateResult, gatewayResult] = await Promise.allSettled([

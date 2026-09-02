@@ -15,12 +15,12 @@ Orchestrate, assign, schedule, route, and monitor Discord shards through one foc
 
 <br />
 
-<code>Bun</code> <code>TypeScript</code> <code>SQLite</code> <code>ArkType</code> <code>Discord.js</code>
+<code>Bun</code> <code>TypeScript</code> <code>Redis</code> <code>ArkType</code> <code>Discord.js</code>
 
 </div>
 
 > [!NOTE]
-> Sharding is Bun-first and raw TypeScript. You control the Hub server, file-backed SQLite database, Bridge workers, and application Discord clients.
+> Sharding is Bun-first and raw TypeScript. You control the Hub server, its Redis database, Bridge workers, and application Discord clients.
 
 > [!WARNING]
 > Sharding is built natively for Bun (>= 1.3.14). Do not run with Node.js, npm, or npx.
@@ -29,7 +29,7 @@ Orchestrate, assign, schedule, route, and monitor Discord shards through one foc
 
 Sharding is a distributed Discord shard orchestration system with one Hub control plane, host Bridges, and application Shard workers.
 
-It provides centralized Discord Gateway identify scheduling, sticky shard assignment rebalancing, inter-process communication (IPC) routing, and durable Bun SQLite persistence.
+It provides centralized Discord Gateway identify scheduling, sticky shard assignment rebalancing, inter-process communication (IPC) routing, and durable Bun Redis persistence.
 
 <table>
 <tr>
@@ -37,7 +37,7 @@ It provides centralized Discord Gateway identify scheduling, sticky shard assign
 
 ### [HubClient](docs/api-reference.md#hubclient)
 
-Central WebSocket control plane, Gateway identify scheduler, sticky assignments, raw SQLite migrations, and HTTP administration API.
+Central WebSocket control plane, Gateway identify scheduler, sticky assignments, Redis-backed state, and HTTP administration API.
 
 </td>
 <td width="33%" valign="top">
@@ -61,14 +61,14 @@ Application process client providing correlated IPC requests, broadcast evaluati
 
 | Component | Responsibility | Persistence / Protocol |
 | --- | --- | --- |
-| `HubClient` | Global assignment, identify scheduling, administration | Bun SQLite (`bun:sqlite`) |
+| `HubClient` | Global assignment, identify scheduling, administration | Bun Redis (`RedisClient`) |
 | `BridgeClient` | Subprocess supervision, capacity monitoring, analytics | Local SQLite & WebSockets |
 | `ShardClient` | Application logic, IPC handling, Discord client integration | Bun IPC |
 
 ## Quick start
 
 > [!IMPORTANT]
-> Sharding requires **Bun** (>= 1.3.14) and uses file-backed **Bun SQLite** persistence.
+> Sharding requires **Bun** (>= 1.3.14) and a **Redis** (or Valkey) server 7.2 or newer.
 
 ### 1. Install package
 
@@ -85,7 +85,7 @@ const hub = new HubClient({
 	adminToken: process.env.HUB_ADMIN_TOKEN ?? "admin-secret-key-12345",
 	botToken: process.env.DISCORD_BOT_TOKEN ?? "",
 	bridgeToken: process.env.HUB_BRIDGE_TOKEN ?? "bridge-secret-key-12345",
-	databasePath: "./sharding-hub.sqlite",
+	redisUrl: process.env.SHARDING_REDIS_URL ?? "redis://127.0.0.1:6379",
 });
 
 await hub.start();
@@ -174,13 +174,11 @@ Browse everything from the **[documentation hub](docs/README.md)**.
 </details>
 
 <details>
-<summary><strong>Database and migrations</strong></summary>
+<summary><strong>Database</strong></summary>
 
 | Command | Purpose |
 | --- | --- |
-| `bun run db:check` | Validate migration history against in-memory database |
-| `bun run db:migrate` | Apply raw SQL migrations to target SQLite database |
-| `bun run db:new -- <name>` | Scaffold a new ordered SQL migration directory |
+| `bun run test:redis` | Run the live Redis integration suite against `SHARDING_REDIS_URL` |
 
 </details>
 
@@ -189,7 +187,7 @@ Browse everything from the **[documentation hub](docs/README.md)**.
 
 | Command | Purpose |
 | --- | --- |
-| `bun run test:sqlite` | Run native SQLite file persistence integration tests |
+| `bun run test:redis` | Run live Redis persistence integration tests |
 | `bun run test:coverage` | Run test coverage report |
 | `bun run test:performance` | Run core performance budget checks |
 | `bun run pack:check` | Validate raw TypeScript package archive |
