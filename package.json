@@ -88,6 +88,6 @@
 	"type": "module",
 	"types": "./src/index.ts",
 	"dependencies": {
-		"arktype": "2.2.3"
+		"arktype": "2.2.8"
 	}
 }
